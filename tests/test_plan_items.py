@@ -179,19 +179,46 @@ def _item(label: str, statement: str, **over) -> dict:
 
 
 def _table(out: str) -> list[str]:
-    """The rendered lines above the legend, styling removed."""
-    return click.unstyle(out).splitlines()[:-4]
+    """The rendered lines between the legend above and the legend below,
+    styling removed."""
+    return click.unstyle(out).splitlines()[4:-4]
 
 
-def test_render_wraps_the_text_within_its_column():
+def test_render_wraps_the_statement_within_its_column():
     words = " ".join(f"w{i}" for i in range(40))
-    out = plan_items.render_items([_item("P1", words, verify="go test", detail="more")], width=50)
+    out = plan_items.render_items([_item("P1", words)], width=50)
     lines = _table(out)
     assert lines[0].startswith("P1 ✓   w0")
     assert len(lines) > 1 and all(len(line) <= 50 for line in lines)
     assert all(line.startswith(" " * 7) and line[7] != " " for line in lines[1:])
-    # Statement, verify: and detail are one wrapped block, not three fields.
-    assert "w39 verify: go test more" in " ".join(line.strip() for line in lines)
+    assert lines[-1].endswith("w39")
+
+
+def test_render_puts_verify_and_detail_on_their_own_labeled_lines():
+    out = plan_items.render_items(
+        [_item("P1", "It renders", verify="go test", detail="via tabulate")], width=70)
+    assert _table(out) == [
+        "P1 ✓   It renders",
+        "       Verify: go test",
+        "       Detail: via tabulate",
+    ]
+    assert click.style("Verify:", fg="bright_cyan") in out
+    assert click.style("Detail:", fg="bright_cyan") in out
+
+
+@pytest.mark.parametrize("field, label", [
+    ({"verify": "TestAlpha, TestBeta, TestGamma, TestDelta, TestEpsilon"}, "Verify"),
+    ({"detail": "one two three four five six seven eight nine ten eleven"}, "Detail"),
+    ({"verdict": "kept", "question_id": 7, "question_status": "answered",
+      "answer": "one two three four five six seven eight nine ten eleven"}, "Answer"),
+])
+def test_render_drops_a_label_text_that_does_not_fit_below_the_label(field, label):
+    out = plan_items.render_items([_item("P1", "a", **field)], width=40)
+    lines = _table(out)
+    at = lines.index(f"       {label}:")
+    under = lines[at + 1:at + 3]
+    assert all(line.startswith(" " * 10) and line[10] != " " for line in under)
+    assert all(len(line) <= 40 for line in lines)
 
 
 def test_render_puts_one_space_between_columns():
@@ -207,7 +234,8 @@ def test_render_labels_the_verdict_note_answer_and_holds_reason():
         answer="fine", holds_reason="nothing changed",
     )], width=70)
     assert _table(out) == [
-        "P1 ✓   It renders verify: go test",
+        "P1 ✓   It renders",
+        "       Verify: go test",
         "       Verdict: Done differently",
         "          via a template",
         "       Answer: fine (EQ-7)",
@@ -299,10 +327,12 @@ def test_render_separates_items_with_one_blank_line():
     assert lines[lines.index("P3 ✓   c") - 1] == ""
 
 
-def test_render_prints_the_legend_dim_between_rules_the_layout_wide():
+def test_render_prints_the_legend_dim_between_rules_above_and_below():
     out = plan_items.render_items([_item("P1", "a")], width=72)
     rule = click.style("─" * 72, dim=True)
-    assert out.endswith("\n\n" + "\n".join([rule, click.style(plan_items.LEGEND, dim=True), rule]))
+    legend = "\n".join([rule, click.style(plan_items.LEGEND, dim=True), rule])
+    assert out.startswith(legend + "\n\n")
+    assert out.endswith("\n\n" + legend)
     assert plan_items.LEGEND == \
         "✓ approved  ~ changed  – withdrawn  + grown  ↷ post-land  ✗ exclusion"
 

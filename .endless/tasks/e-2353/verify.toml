@@ -6,11 +6,13 @@
 # E-2353: plan_items.render_items lays plan items out as a headerless
 # table — number, three fixed glyph slots, text wrapped within its column
 # to the terminal width (70 when it cannot be read), one space between
-# columns — with one blank line between items and a static dim legend
-# between two rules under it. After reconciliation the text cell carries
-# labeled lines in bright cyan: Verdict:, its note indented under it,
-# Answer: or Question:, and Answer holds:. task show --agent keeps the
-# words rendering; --json is untouched.
+# columns — with one blank line between items and a static dim legend,
+# between two rules, above and below it. Under the statement the text cell
+# carries labeled lines in bright cyan: Verify:, Detail:, and after
+# reconciliation Verdict: with its note under it, Answer: or Question:,
+# and Answer holds:. A label's text shares its line when it fits and drops
+# below it otherwise. task show --agent keeps the words rendering; --json
+# is untouched.
 #
 # The runner's HOME holds no database, so the checks below exercise the
 # renderer on rows built in its tests rather than on a task's items.
@@ -27,9 +29,14 @@ paths  = ["tests/test_plan_items.py"]
 # Each plan item's tests by name, so deleting one cannot turn the suite
 # green by absence.
 [[check]]
-name     = "P1/P2: statement, verify: and detail wrap as one block in the text column"
-sh       = "uv run pytest tests/test_plan_items.py -q -k test_render_wraps_the_text_within_its_column 2>&1"
+name     = "P1: the statement wraps within the text column"
+sh       = "uv run pytest tests/test_plan_items.py -q -k test_render_wraps_the_statement_within_its_column 2>&1"
 contains = "1 passed"
+
+[[check]]
+name     = "P2: Verify: and Detail: on their own labeled lines; text that does not fit drops below its label"
+sh       = "uv run pytest tests/test_plan_items.py -q -k 'test_render_puts_verify_and_detail or test_render_drops_a_label_text' 2>&1"
+contains = "4 passed"
 
 [[check]]
 name     = "P3: 70 columns when the width cannot be read"
@@ -52,8 +59,8 @@ sh       = "uv run pytest tests/test_plan_items.py -q -k test_render_fills_each_
 contains = "9 passed"
 
 [[check]]
-name     = "P7: the legend prints dim between two rules the layout wide"
-sh       = "uv run pytest tests/test_plan_items.py -q -k test_render_prints_the_legend_dim_between_rules 2>&1"
+name     = "P7/P19: the legend prints dim between two rules, above the table and below it"
+sh       = "uv run pytest tests/test_plan_items.py -q -k test_render_prints_the_legend_dim_between_rules_above_and_below 2>&1"
 contains = "1 passed"
 
 [[check]]

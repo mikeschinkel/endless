@@ -492,16 +492,19 @@ def glyphs(it: dict) -> str:
 
 
 def _labeled(label: str, text: str, width: int) -> list[str]:
-    """`Label: text` wrapped to `width`, continuation lines indented under the
-    label, the label colored once the wrap is done so its escape codes never
-    count toward the width. A fixed label sits left of the colon; whatever
-    varies sits right of it."""
+    """`Label: text` on one line when it fits in `width`; otherwise the label
+    alone, then the text wrapped on the lines under it, indented beneath the
+    label. The label is colored once the layout is done so its escape codes
+    never count toward the width. A fixed label sits left of the colon;
+    whatever varies sits right of it."""
     head = f"{label}:"
-    lines = textwrap.wrap(f"{head} {text}" if text else head, width,
-                          subsequent_indent=" " * _LABEL_INDENT,
-                          break_long_words=False, break_on_hyphens=False)
-    lines[0] = click.style(head, fg=_LABEL_COLOR) + lines[0][len(head):]
-    return lines
+    styled = click.style(head, fg=_LABEL_COLOR)
+    if len(head) + 1 + len(text) <= width:
+        return [f"{styled} {text}"]
+    return [styled] + textwrap.wrap(text, width,
+                                    initial_indent=" " * _LABEL_INDENT,
+                                    subsequent_indent=" " * _LABEL_INDENT,
+                                    break_long_words=False, break_on_hyphens=False)
 
 
 def _reconciled_lines(it: dict, width: int) -> list[str]:
@@ -537,18 +540,18 @@ def _reconciled_lines(it: dict, width: int) -> list[str]:
 
 
 def _text_cell(it: dict, *, verdicts: bool, width: int) -> str:
-    """The item's text column: statement, verify: and detail as one block that
-    tabulate wraps to the column, then — when reconciled — the labeled lines.
-    Those are wrapped here, since tabulate wraps each line of a cell on its
-    own and would start a continuation line at the column's edge; a line
-    that already fits passes through it untouched.
+    """The item's text column: the statement, which tabulate wraps to the
+    column, then its fields as labeled lines — Verify:, Detail:, and when
+    reconciled the verdict and what follows it. Those are wrapped here, since
+    tabulate wraps each line of a cell on its own and would start a
+    continuation line at the column's edge; a line that already fits passes
+    through it untouched.
     """
-    parts = [it["statement"]]
+    lines = [it["statement"]]
     if it.get("verify"):
-        parts.append(f"verify: {it['verify']}")
+        lines += _labeled("Verify", it["verify"], width)
     if it.get("detail"):
-        parts.append(it["detail"])
-    lines = [" ".join(parts)]
+        lines += _labeled("Detail", it["detail"], width)
     if verdicts:
         lines += _reconciled_lines(it, width)
     return "\n".join(lines)
@@ -562,8 +565,8 @@ def terminal_width() -> int:
 def render_items(rows: list[dict], *, verdicts: bool = True,
                  width: int | None = None) -> str:
     """Items as a headerless table — number, three glyph slots, text — with
-    one blank line between items and the glyph legend under it, between two
-    rules the width of the layout (E-2353).
+    one blank line between items and the glyph legend above and below it,
+    each time between two rules the width of the layout (E-2353).
 
     The text cell wraps within its column to `width` (the terminal's when not
     given). The number column is as wide as the widest label present, so the
@@ -588,7 +591,8 @@ def render_items(rows: list[dict], *, verdicts: bool = True,
     lines = [line.rstrip() for line in out.splitlines()]
     rule = click.style(_RULE * (label_w + _COLUMN_GAP + _GLYPH_SLOTS + _COLUMN_GAP + text_w),
                        dim=True)
-    return "\n".join(lines + ["", rule, click.style(LEGEND, dim=True), rule])
+    legend = [rule, click.style(LEGEND, dim=True), rule]
+    return "\n".join(legend + [""] + lines + [""] + legend)
 
 
 def render_items_words(rows: list[dict], *, verdicts: bool = True) -> str:
