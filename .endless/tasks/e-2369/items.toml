@@ -35,7 +35,7 @@ verify = "docs/guide/disallowed-paths.md; TestResolveDirectory_DownloadsIsASubtr
 [[item]]
 id = "P6"
 kind = "deliverable"
-statement = "Downloads and the media folders are refused as subtrees; Documents, Desktop and Public only as themselves"
+statement = "Downloads and the media folders are refused along with everything in them; Documents, Desktop and Public are refused themselves, but a folder inside them can be a project"
 verify = "TestResolveDirectory_DownloadsIsASubtree; docs/guide/disallowed-paths.md"
 
 [[item]]
