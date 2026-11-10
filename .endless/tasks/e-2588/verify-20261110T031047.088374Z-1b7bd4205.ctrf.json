@@ -1,0 +1,1590 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.2.0",
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 144,
+      "passed": 144,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1794280247015,
+      "stop": 1794280247085
+    },
+    "tests": [
+      {
+        "name": "go.mod is tidy without go.work",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "go.mod is tidy without go.work"
+        }
+      },
+      {
+        "name": "TestRender_Claim_ArrivalMechanicsClose/todo",
+        "status": "passed",
+        "duration": 320,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_ArrivalMechanicsClose/bugfix",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_ArrivalMechanicsClose/research",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_ArrivalMechanicsClose/epic",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_ArrivalMechanicsClose/brainstorm",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_ArrivalMechanicsClose",
+        "status": "passed",
+        "duration": 390,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_TerminalRulePerType/todo",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_TerminalRulePerType/bugfix",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_TerminalRulePerType/research",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_TerminalRulePerType/brainstorm",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_TerminalRulePerType/epic",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_TerminalRulePerType",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_MechanicsPartial_SharedBySpawnAndClaim/todo",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_MechanicsPartial_SharedBySpawnAndClaim/bugfix",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_MechanicsPartial_SharedBySpawnAndClaim/research",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_MechanicsPartial_SharedBySpawnAndClaim/epic",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_MechanicsPartial_SharedBySpawnAndClaim/brainstorm",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_MechanicsPartial_SharedBySpawnAndClaim",
+        "status": "passed",
+        "duration": 150,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_UnknownTaskType_FallsBackToTodo/absent",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_UnknownTaskType_FallsBackToTodo/unknown",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_UnknownTaskType_FallsBackToTodo",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_EpicCarriesChildrenState",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_WorktreeRemovalIsCategorical/todo",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_WorktreeRemovalIsCategorical/bugfix",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_WorktreeRemovalIsCategorical/research",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_WorktreeRemovalIsCategorical/epic",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_WorktreeRemovalIsCategorical/brainstorm",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_WorktreeRemovalIsCategorical",
+        "status": "passed",
+        "duration": 150,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_DiscoveryBranchesSurviveCompression/todo",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_DiscoveryBranchesSurviveCompression/bugfix",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_DiscoveryBranchesSurviveCompression/research",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_DiscoveryBranchesSurviveCompression/epic",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_DiscoveryBranchesSurviveCompression/brainstorm",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_DiscoveryBranchesSurviveCompression",
+        "status": "passed",
+        "duration": 140,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation/todo",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation/bugfix",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation/research",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation/epic",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation/brainstorm",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation",
+        "status": "passed",
+        "duration": 150,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/todo/todo",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/todo/bugfix",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/todo/research",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/todo/epic",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/todo/brainstorm",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/bugfix/todo",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/bugfix/bugfix",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/bugfix/research",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/bugfix/epic",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/bugfix/brainstorm",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/research/todo",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/research/bugfix",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/research/research",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/research/epic",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/research/brainstorm",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/epic/todo",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/epic/bugfix",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/epic/research",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/epic/epic",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/epic/brainstorm",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/brainstorm/todo",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/brainstorm/bugfix",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/brainstorm/research",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/brainstorm/epic",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/brainstorm/brainstorm",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/claim/todo",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/claim/bugfix",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/claim/research",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/claim/epic",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/claim/brainstorm",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions",
+        "status": "passed",
+        "duration": 450,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestFindingsHandoffsNameTheReviewGate/research/research",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestFindingsHandoffsNameTheReviewGate/claim/research",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestFindingsHandoffsNameTheReviewGate/brainstorm/brainstorm",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestFindingsHandoffsNameTheReviewGate/claim/brainstorm",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestFindingsHandoffsNameTheReviewGate",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestEveryTypeHandoffNamesSomeTerminalInstruction/todo",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestEveryTypeHandoffNamesSomeTerminalInstruction/bugfix",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestEveryTypeHandoffNamesSomeTerminalInstruction/research",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestEveryTypeHandoffNamesSomeTerminalInstruction/epic",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestEveryTypeHandoffNamesSomeTerminalInstruction/brainstorm",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestEveryTypeHandoffNamesSomeTerminalInstruction",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRenderFile_BothBranches",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRenderFile_NeedsNoProjectContext",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRenderFile_MissingFileExitsNonZero",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRenderFile_RejectsATemplateName",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRenderFile_RejectsProject",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRenderFile_DoesNotMaterialize",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_FullVars_ContainsExpectedSubstitutions",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_ExceptionRule/todo",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_ExceptionRule/bugfix",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_ExceptionRule/epic",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_ExceptionRule/research",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_ExceptionRule/brainstorm",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_ExceptionRule",
+        "status": "passed",
+        "duration": 120,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Brainstorm_InterviewModeFraming",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Brainstorm_DecisionTests",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_MissingVar_PrintsNoValuePlaceholder",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_UnknownTemplate_ExitsNonZero",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_MaterializesEmbedded",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_UserEditPersists",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_DeleteToRestore",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_LocalTmplPrecedence",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_NoProjectContext_ExitsNonZero",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_ProjectFlagResolvesViaDB",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_UnknownProjectFlag_ExitsNonZero",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestNormalizeName_AppliesDefaultExtension",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_BareNameAndExplicitMd_AreEquivalent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_SelfDev_SkipsMaterialize",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Consumer_AutoCommitsMaterialized",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Consumer_NonGit_NoError",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_OmitsReportingWhenGateOff/todo",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_OmitsReportingWhenGateOff/bugfix",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_OmitsReportingWhenGateOff/epic",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_OmitsReportingWhenGateOff/research",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_OmitsReportingWhenGateOff/brainstorm",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_OmitsReportingWhenGateOff",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_EpicHandoff_ContextOrPlan",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/todo/todo/gate=true",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/todo/gate=true",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/bugfix/bugfix/gate=true",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/bugfix/gate=true",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/epic/epic/gate=true",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/epic/gate=true",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/research/research/gate=true",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/research/gate=true",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/brainstorm/brainstorm/gate=true",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/brainstorm/gate=true",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/todo/todo/gate=false",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/todo/gate=false",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/bugfix/bugfix/gate=false",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/bugfix/gate=false",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/epic/epic/gate=false",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/epic/gate=false",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/research/research/gate=false",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/research/gate=false",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/brainstorm/brainstorm/gate=false",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/brainstorm/gate=false",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites",
+        "status": "passed",
+        "duration": 320,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "the sentence sits in handoff_close, outside the report_gate branch",
+        "status": "passed",
+        "duration": 7,
+        "labels": {
+          "check": "the sentence sits in handoff_close, outside the report_gate branch"
+        }
+      },
+      {
+        "name": "a comment in _close.tmpl records why the sentence exists",
+        "status": "passed",
+        "duration": 5,
+        "labels": {
+          "check": "a comment in _close.tmpl records why the sentence exists"
+        }
+      },
+      {
+        "name": "the guide's final-message discipline says the same, in both gate branches",
+        "status": "passed",
+        "duration": 7,
+        "labels": {
+          "check": "the guide's final-message discipline says the same, in both gate branches"
+        }
+      },
+      {
+        "name": ".endless/tasks/CLAUDE.md is unchanged by this task",
+        "status": "passed",
+        "duration": 13,
+        "labels": {
+          "check": ".endless/tasks/CLAUDE.md is unchanged by this task"
+        }
+      }
+    ]
+  }
+}
