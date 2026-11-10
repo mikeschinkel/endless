@@ -1,0 +1,1 @@
+E-2369 implements it: home, temp and per-OS directories refused through one Go resolver for both registration paths, with an overrides file; its worktree case landed with E-2349; directories outside $HOME stay allowed, per Mike's later decision.
