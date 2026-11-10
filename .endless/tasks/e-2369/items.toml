@@ -77,8 +77,8 @@ verify = "tests/test_disallowed_projects.py"
 [[item]]
 id = "P13"
 kind = "deliverable"
-statement = "A directory's own .endless/config.json never makes $HOME a project"
-verify = "tests/test_disallowed_projects.py::test_a_home_config_file_does_not_make_home_a_project"
+statement = "A .endless/config.json in a directory that cannot be a project (disallowed, or holding a project) names no project; inside a project it still does, so task worktrees keep their name"
+verify = "tests/test_disallowed_projects.py: test_a_home_config_file_does_not_make_home_a_project, test_a_config_file_in_a_disallowed_directory_names_no_project, test_a_config_file_in_a_directory_holding_a_project_names_no_project, test_a_config_file_inside_a_project_still_names_it"
 
 [[item]]
 id = "P14"
