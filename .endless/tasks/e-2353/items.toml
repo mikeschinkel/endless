@@ -98,3 +98,9 @@ statement = "The table proper-cases the verdict words: As planned, Done differen
 id = "P18"
 kind = "deliverable"
 statement = "The labels Verdict:, Answer:, Question: and Answer holds: print in bright cyan, styled after the line is wrapped so the escape codes never count toward the width"
+
+[[item]]
+id = "P19"
+kind = "deliverable"
+statement = "The legend block, a dim rule, the legend and a dim rule, prints above the table as well as below it, so in task show it sits immediately under the '— Plan items —' heading"
+verify = "tests/test_plan_items.py"
