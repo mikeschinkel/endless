@@ -8089,3 +8089,7 @@ While reconciling E-2369 (EQ-59), I recommended checking for a stray .endless/co
 ### [2026-11-09] When a land rebase drops a plan item's change, reopen and reconcile again before verify
 E-2589's land hit a rebase conflict because main (E-2282) had already landed the identical tests/test_plan_items.py fix that was grown plan item P24. Taking main's side left the reconciliation claiming P24 'as planned' with a change the branch no longer had, and 'endless task verify' then refused because the code changed since the last reconciliation. Reconcile is refused while the task is unverified, so the path is: endless task update --status revisit, reconcile again (mark the item 'differently' and name the main commit that covers it), answer the filed question, then go revisit -> underway -> unverified, because revisit cannot move straight to unverified.
 - **Project**: endless
+
+### [2026-11-10] Plan items: render each stored field on its own labeled line, never merged into the statement
+On E-2353 the planner chose to join a plan item's statement, verify and detail into one wrapped block, and Mike missed it at approval. After the labeled Verdict: line landed, 'verify:' read as part of the sentence. Mike's correction: verify and detail are separate fields and get their own labeled lines (Verify:, Detail:), text on the label's line when it fits, otherwise on the next line indented under the label. Reason: a field that is stored separately should be visibly separate, and a planner's merge of distinct fields is easy to miss in review.
+- **Project**: endless
