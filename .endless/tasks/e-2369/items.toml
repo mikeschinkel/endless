@@ -77,8 +77,8 @@ verify = "tests/test_disallowed_projects.py"
 [[item]]
 id = "P13"
 kind = "deliverable"
-statement = "A .endless/config.json in a directory that cannot be a project (disallowed, or holding a project) names no project; inside a project it still does, so task worktrees keep their name"
-verify = "tests/test_disallowed_projects.py: test_a_home_config_file_does_not_make_home_a_project, test_a_config_file_in_a_disallowed_directory_names_no_project, test_a_config_file_in_a_directory_holding_a_project_names_no_project, test_a_config_file_inside_a_project_still_names_it"
+statement = "The resolver names a directory's project: the nearest registered project at or above it, so worktrees and subdirectories get its name; a disallowed, ignored or project-holding directory is in none, whatever its .endless/config.json says; the config is read only where no row applies"
+verify = "tests/test_disallowed_projects.py (config-file and subdirectory tests); tests/test_project_path.py::test_name_for_cwd_prefers_the_registered_row_to_the_config, test_name_for_cwd_reads_the_config_of_an_unregistered_checkout"
 
 [[item]]
 id = "P14"
