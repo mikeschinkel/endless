@@ -104,3 +104,7 @@ contains = "7 passed"
 name     = "P18: the labels print bright cyan"
 sh       = "uv run pytest tests/test_plan_items.py -q -k test_render_colors_the_labels 2>&1"
 contains = "1 passed"
+
+[[check]]
+name   = "P20: the fallback-width test patches plan_items' own get_terminal_size, never the shared shutil"
+sh     = "grep -q 'monkeypatch.setattr(plan_items, \"get_terminal_size\"' tests/test_plan_items.py && ! grep -n 'plan_items.shutil' tests/test_plan_items.py"
