@@ -8081,3 +8081,7 @@ While designing the outage line for E-2589, Mike proposed 'Outage[Github]: Degra
 ### [2026-11-09] A task spawned moments ago is not an orphan yet
 In /whats-left right after Mike spawned E-2397, its board row showed underway with no claim, and I listed it as a possibly failed spawn. Mike: 'You checked too soon.' The spawned session claims the task a little after the spawn returns. When a task was spawned in the last few minutes and shows no claim, re-check before reporting it, rather than putting it on Mike's list.
 - **Project**: endless
+
+### [2026-11-09] Don't let CLI performance worries drive design
+While reconciling E-2369 (EQ-59), I recommended checking for a stray .endless/config.json only at $HOME and above, because checking every disallowed directory would add a call into Go on a hot path. Mike said I keep over-indexing on performance concerns that are irrelevant for a CLI. A Go call costs milliseconds; correctness and completeness come first. Raise performance only when it is measured to matter to a user.
+- **Project**: endless
