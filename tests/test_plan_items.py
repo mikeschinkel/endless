@@ -338,9 +338,9 @@ def test_render_prints_the_legend_dim_between_rules_above_and_below():
 
 
 def test_render_wraps_to_seventy_columns_when_the_terminal_width_is_unknown(monkeypatch):
-    # A real terminal_size: shutil is shared, and pytest's own reporter unpacks
-    # what this returns while the stub is live.
-    monkeypatch.setattr(plan_items.shutil, "get_terminal_size",
+    # Patches plan_items' own reference, never the shared shutil module: pytest's
+    # reporter calls shutil.get_terminal_size while the stub is live.
+    monkeypatch.setattr(plan_items, "get_terminal_size",
                         lambda fallback=(80, 24): os.terminal_size(fallback))
     out = plan_items.render_items([_item("P1", " ".join("word" for _ in range(30)))])
     lines = click.unstyle(out).splitlines()

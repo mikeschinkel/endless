@@ -18,10 +18,10 @@ renders.
 """
 
 import json
-import shutil
 import textwrap
 import tomllib
 from pathlib import Path
+from shutil import get_terminal_size
 
 import click
 import tabulate as tabulate_mod
@@ -559,7 +559,7 @@ def _text_cell(it: dict, *, verdicts: bool, width: int) -> str:
 
 def terminal_width() -> int:
     """The terminal's width when it can be read, else FALLBACK_WIDTH."""
-    return shutil.get_terminal_size(fallback=(FALLBACK_WIDTH, 0)).columns
+    return get_terminal_size(fallback=(FALLBACK_WIDTH, 0)).columns
 
 
 def render_items(rows: list[dict], *, verdicts: bool = True,
