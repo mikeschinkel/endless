@@ -29,8 +29,8 @@ verify = "TestProjectIDForPath_NeverAutoRegistersHome, TestResolveDirectory_Nest
 [[item]]
 id = "P5"
 kind = "deliverable"
-statement = "A built-in per-OS list (Linux FHS and XDG dirs, macOS, Windows) refuses system and user-data directories, scoped self or subtree"
-verify = "docs/guide/disallowed-paths.md; TestResolveDirectory_DownloadsIsASubtree"
+statement = "A built-in per-OS list (Linux FHS and XDG dirs, macOS, Windows) refuses system, user-data and temp directories, scoped self or subtree; temp space (/private on macOS, /tmp and /var/tmp on Linux) is refused whole"
+verify = "docs/guide/disallowed-paths.md; TestResolveDirectory_DownloadsIsASubtree, TestResolveDirectory_TempTreesAreRefused, test_register_refuses_a_repo_in_temp_space"
 
 [[item]]
 id = "P6"
