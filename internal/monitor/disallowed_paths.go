@@ -78,11 +78,16 @@ const (
 	whyMedia     = "downloads or media, not code"
 	whyAppData   = "application data and settings"
 	whyParentDir = "a folder of projects"
-	whyMount     = "a mount point or scratch root; its children may be projects"
+	whyMount     = "a mount point; its children may be projects"
+	whyScratch   = "temporary files, cleared without notice"
 )
 
 func sysTree(path string) disallowedEntry {
 	return disallowedEntry{Path: path, Scope: ScopeSubtree, Why: whySystem}
+}
+
+func scratchTree(path string) disallowedEntry {
+	return disallowedEntry{Path: path, Scope: ScopeSubtree, Why: whyScratch}
 }
 
 func mountRoot(path string) disallowedEntry {
@@ -108,10 +113,11 @@ var builtinDisallowed = map[string][]disallowedEntry{
 		sysTree("/boot"), sysTree("/dev"), sysTree("/proc"), sysTree("/sys"), sysTree("/run"), sysTree("/etc"),
 		sysTree("/usr/bin"), sysTree("/usr/sbin"), sysTree("/usr/lib"), sysTree("/usr/lib64"),
 		sysTree("/usr/libexec"), sysTree("/usr/include"), sysTree("/usr/share"),
-		sysTree("/var/lib"), sysTree("/var/log"), sysTree("/var/cache"), sysTree("/var/spool"), sysTree("/var/tmp"),
+		sysTree("/var/lib"), sysTree("/var/log"), sysTree("/var/cache"), sysTree("/var/spool"),
+		scratchTree("/tmp"), scratchTree("/var/tmp"),
 		sysTree("/lost+found"),
 		mountRoot("/usr"), mountRoot("/usr/local"), mountRoot("/var"), mountRoot("/var/www"), mountRoot("/opt"),
-		mountRoot("/srv"), mountRoot("/mnt"), mountRoot("/media"), mountRoot("/tmp"), mountRoot("/root"),
+		mountRoot("/srv"), mountRoot("/mnt"), mountRoot("/media"), mountRoot("/root"),
 		{Path: "~/.config", Scope: ScopeSubtree, Why: whyAppData},
 		{Path: "~/.local", Scope: ScopeSubtree, Why: whyAppData},
 		{Path: "~/.cache", Scope: ScopeSubtree, Why: whyAppData},
@@ -125,16 +131,17 @@ var builtinDisallowed = map[string][]disallowedEntry{
 		knownDir("Templates", ScopeSelf, whyUserData),
 		parentDirEntry("~/Projects"),
 	},
-	// /etc, /tmp and /var are symlinks into /private, and paths are compared
-	// resolved, so /private and /private/var are refused only as themselves:
-	// refusing either whole would refuse every temp directory.
+	// /etc, /tmp and /var are symlinks into /private, so refusing /private whole
+	// covers all three, and every temp directory with them: a project is not
+	// kept in scratch space. Refused now rather than allowed and later taken
+	// back (EQ-58); a test frees its own temp tree by removing this entry in
+	// its overrides file.
 	"darwin": {
 		sysTree("/System"), sysTree("/Library"), sysTree("/Applications"),
 		sysTree("/bin"), sysTree("/sbin"),
 		sysTree("/usr/bin"), sysTree("/usr/sbin"), sysTree("/usr/lib"), sysTree("/usr/libexec"), sysTree("/usr/share"),
-		sysTree("/etc"), sysTree("/dev"), sysTree("/cores"),
-		sysTree("/private/var/db"), sysTree("/private/var/log"),
-		mountRoot("/private"), mountRoot("/private/var"), mountRoot("/tmp"),
+		sysTree("/dev"), sysTree("/cores"),
+		{Path: "/private", Scope: ScopeSubtree, Why: "operating-system files and temporary files (/etc, /tmp and /var resolve here)"},
 		mountRoot("/usr"), mountRoot("/usr/local"), mountRoot("/opt"), mountRoot("/Volumes"),
 		{Path: "~/Library", Scope: ScopeSubtree, Why: whyAppData},
 		{Path: "~/Applications", Scope: ScopeSubtree, Why: whyAppData},

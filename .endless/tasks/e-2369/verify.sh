@@ -10,7 +10,8 @@
 #   A. Fail-fast: this task's Go and Python tests, each contract test by name
 #      so deleting one cannot turn the section green by absence.
 #   B. Through a binary built from this tree, against a throwaway database and
-#      the runner's temp HOME: $HOME and above are disallowed; ~/Projects is a
+#      the runner's temp HOME: temp space is refused whole (EQ-58), and a
+#      removal in the overrides file frees it; $HOME and above are disallowed; ~/Projects is a
 #      parent directory whose children are allowed; a row at $HOME is never
 #      inherited; ~/Downloads is refused whole; the overrides skeleton is
 #      written; a project inside or around another is flagged.
@@ -57,6 +58,7 @@ for t in TestResolveDirectory_HomeAndAboveAreDisallowed \
          TestResolveDirectory_HomeCannotBeRemoved \
          TestResolveDirectory_ParentDirStopsTheWalk \
          TestResolveDirectory_NestedProjects \
+         TestResolveDirectory_TempTreesAreRefused \
          TestXDGUserDir_LocalizedAndDisabled \
          TestDisallowedPathsDocIsCurrent; do
     contract "${t}"
@@ -90,6 +92,22 @@ rows = d["rows"] if isinstance(d, dict) else d
 print(rows[0].get(sys.argv[1], ""))' "$2"
 }
 
+# Temp space is never a project's home (EQ-58). This scratch dir is under
+# /private on macOS and /tmp on Linux.
+assert_eq "a directory in temp space is disallowed" "disallowed" "$(field "${TMP}/work/outer" kind)"
+assert_eq "temp space is refused as a subtree" "subtree" "$(field "${TMP}/work/outer" scope)"
+
+if [[ -f "${PROBE}/disallowed-paths.json" ]]; then
+    report_pass "the overrides skeleton is written on first need"
+else
+    report_fail "the overrides skeleton is written on first need" "${PROBE}/disallowed-paths.json" "missing"
+fi
+
+# Everything below lives in temp space too (the runner's HOME included), so
+# free it the way a user would: remove the temp-tree rules in the overrides file.
+printf '{"remove": ["/private", "/tmp", "/var/tmp"]}\n' > "${PROBE}/disallowed-paths.json"
+assert_eq "a removal in the overrides file frees temp space" "none" "$(field "${TMP}/work/outer" kind)"
+
 assert_eq "\$HOME is disallowed" "disallowed" "$(field "${H}" kind)"
 assert_eq "the directory above \$HOME is disallowed" "disallowed" "$(field "$(dirname "${H}")" kind)"
 assert_eq "~/Projects is disallowed" "disallowed" "$(field "${H}/Projects" kind)"
@@ -102,12 +120,6 @@ if [[ "$(uname)" == "Darwin" ]]; then
     assert_eq "~/Downloads is refused as a subtree" "subtree" "$(field "${H}/Downloads/some-repo-main" scope)"
 else
     report_skip "~/Downloads subtree" "Linux reads it from user-dirs.dirs; covered by the Go tests"
-fi
-
-if [[ -f "${PROBE}/disallowed-paths.json" ]]; then
-    report_pass "the overrides skeleton is written on first need"
-else
-    report_fail "the overrides skeleton is written on first need" "${PROBE}/disallowed-paths.json" "missing"
 fi
 
 # The bug that filed E-2369: a row at $HOME claimed everything under it.

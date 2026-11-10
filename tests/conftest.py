@@ -104,6 +104,12 @@ def isolated_env(tmp_path, monkeypatch):
 
     config_dir = tmp_path / ".config" / "endless"
     config_dir.mkdir(parents=True)
+    # The temp trees are refused as projects (E-2369): /private on macOS, where
+    # tmp_path lives, and /tmp and /var/tmp on Linux. This test's own overrides
+    # file removes those rules, the way a user would, so its fixtures may be
+    # projects; the file is in this test's config dir and reaches nothing else.
+    (config_dir / "disallowed-paths.json").write_text(
+        json.dumps({"remove": TEMP_TREE_REMOVALS}))
 
     projects_root = tmp_path / "Projects"
     projects_root.mkdir()
@@ -428,6 +434,10 @@ def seeded_project_at_cwd(isolated_env, monkeypatch):
         (str(proj_dir),),
     )
     return proj_dir
+
+
+# Mirrors monitor.TestTempTreeRemovals on the Go side.
+TEMP_TREE_REMOVALS = ["/private", "/tmp", "/var/tmp"]
 
 
 def init_git_repo(path: Path) -> Path:

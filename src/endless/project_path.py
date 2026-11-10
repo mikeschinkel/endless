@@ -157,9 +157,10 @@ def project_name_for_cwd(cwd: Path | str) -> str | None:
     is the project's own declaration and needs no DB), and only then the
     registered row whose path denotes cwd.
     """
-    # $HOME and above can never be a project (E-2369), so a stray
-    # ~/.endless/config.json must not make one.
-    pcfg = (None if config.is_home_or_above(cwd)
+    # A directory that cannot be a project (E-2369) is not made one by a
+    # config file in it: a stray ~/.endless/config.json, or a repo copied
+    # into ~/Downloads with its .endless/ (EQ-59).
+    pcfg = (None if config.ignores_project_config(Path(cwd))
             else config.project_config_read(Path(cwd)))
     # An unregistered project keeps its config on disk, marked as such; its
     # name no longer names a project (E-2251).

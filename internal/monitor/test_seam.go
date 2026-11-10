@@ -2,7 +2,9 @@ package monitor
 
 import (
 	"database/sql"
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/mikeschinkel/endless/internal/processkind"
@@ -61,6 +63,7 @@ func SetTestDB(db *sql.DB) (restore func()) {
 		tmpCfg = "test-injected" // last resort: keep the gate satisfied
 	}
 	dbContextDir = tmpCfg
+	_ = FreeTestTempTree(tmpCfg)
 
 	// A different database has different (which is to say, no) TEMP observation
 	// tables, so any snapshot taken against the previous one is meaningless
@@ -82,4 +85,23 @@ func SetTestDB(db *sql.DB) (restore func()) {
 			os.RemoveAll(tmpCfg)
 		}
 	}
+}
+
+// TestTempTreeRemovals are the built-in rules that refuse the system temp
+// trees: /private on macOS (where $TMPDIR resolves), /tmp and /var/tmp on Linux.
+// A test's fixtures live there, so a test removes them (E-2369).
+var TestTempTreeRemovals = []string{"/private", "/tmp", "/var/tmp"}
+
+// FreeTestTempTree writes an overrides file into cfgDir that removes the rules
+// refusing the temp trees, so a test may treat directories under its temp dir
+// as projects. It uses the same overrides file a user would edit; cfgDir is
+// the test's own config dir, so the removal reaches no one else.
+//
+// USE ONLY IN TESTS.
+func FreeTestTempTree(cfgDir string) error {
+	body, err := json.Marshal(map[string]any{"remove": TestTempTreeRemovals})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(cfgDir, DisallowedOverridesFile), body, 0o644)
 }

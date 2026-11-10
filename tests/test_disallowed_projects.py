@@ -13,7 +13,7 @@ from endless import config, db
 from endless.cli import main
 from endless.project_path import stored
 
-from conftest import init_git_repo
+from conftest import TEMP_TREE_REMOVALS, init_git_repo
 
 
 def _invoke(*args):
@@ -36,7 +36,11 @@ def _home() -> Path:
     return Path(os.environ["HOME"]).resolve()
 
 
-def _overrides(isolated_env, body: dict):
+def _overrides(isolated_env, body: dict, free_temp: bool = True):
+    """Write this test's overrides file; free_temp keeps the fixture's removal
+    of the temp-tree rules, without which every fixture path is refused."""
+    if free_temp:
+        body = {**body, "remove": body.get("remove", []) + TEMP_TREE_REMOVALS}
     (isolated_env["config_dir"] / "disallowed-paths.json").write_text(json.dumps(body))
     config.forget_verdicts()
 
@@ -105,3 +109,54 @@ def test_a_home_config_file_does_not_make_home_a_project(isolated_env, monkeypat
     endless_dir.mkdir()
     (endless_dir / "config.json").write_text(json.dumps({"name": "me"}))
     assert project_name_for_cwd(_home()) is None
+
+
+def test_register_refuses_a_repo_in_temp_space(isolated_env):
+    # EQ-58: a project is never kept in scratch space. tmp_path is under
+    # /private (macOS) or /tmp (Linux), so with the fixture's removal undone
+    # the repo is refused.
+    repo = init_git_repo(isolated_env["projects_root"] / "scratch")
+    _overrides(isolated_env, {}, free_temp=False)
+
+    result = _register(repo)
+    assert result.exit_code != 0
+    assert "cannot be an Endless project" in result.output
+    assert _row(repo) is None
+
+
+def test_a_config_file_in_a_disallowed_directory_names_no_project(isolated_env):
+    # EQ-59: a repo copied into ~/Downloads with its .endless/ must not act as
+    # the project it was copied from.
+    from endless.project_path import project_name_for_cwd
+
+    copy = _home() / "Downloads" / "endless-main"
+    (copy / ".endless").mkdir(parents=True)
+    (copy / ".endless" / "config.json").write_text(json.dumps({"name": "endless"}))
+    config.forget_verdicts()
+    assert project_name_for_cwd(copy) is None
+
+
+def test_a_config_file_in_a_directory_holding_a_project_names_no_project(isolated_env):
+    from endless.project_path import project_name_for_cwd
+
+    inner = init_git_repo(isolated_env["projects_root"] / "group" / "app")
+    assert _register(inner).exit_code == 0
+    outer = inner.parent
+    (outer / ".endless").mkdir()
+    (outer / ".endless" / "config.json").write_text(json.dumps({"name": "group"}))
+    config.forget_verdicts()
+    assert project_name_for_cwd(outer) is None
+
+
+def test_a_config_file_inside_a_project_still_names_it(isolated_env):
+    # A task worktree sits inside its project's main checkout and names the
+    # project by its own config file; that must keep working.
+    from endless.project_path import project_name_for_cwd
+
+    main_checkout = init_git_repo(isolated_env["projects_root"] / "app")
+    assert _register(main_checkout, name="app").exit_code == 0
+    wt = main_checkout / ".endless" / "worktrees" / "e-1"
+    (wt / ".endless").mkdir(parents=True)
+    (wt / ".endless" / "config.json").write_text(json.dumps({"name": "app"}))
+    config.forget_verdicts()
+    assert project_name_for_cwd(wt) == "app"

@@ -59,6 +59,9 @@ func withTestDB(t *testing.T) *sql.DB {
 	dbConn = db
 	dbErr = nil
 	dbContextDir = t.TempDir() // satisfy the E-1429 gate
+	if err := FreeTestTempTree(dbContextDir); err != nil {
+		t.Fatal(err)
+	}
 
 	// Isolate every test from the developer's tmux (E-1898). `go test` run from
 	// inside a pane inherits TMUX/TMUX_PANE, so without this the binding path

@@ -10,6 +10,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/endless/internal/tmuxtest"
 )
@@ -19,6 +20,9 @@ import (
 // sessions the test wants. Used by the ensure-claude-id binary tests.
 func seedEnsureClaudeIDDB(t *testing.T, cfgDir, projectPath string, sessions []sessionSeed) {
 	t.Helper()
+	if err := monitor.FreeTestTempTree(cfgDir); err != nil {
+		t.Fatal(err)
+	}
 	dbPath := filepath.Join(cfgDir, "endless.db")
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {

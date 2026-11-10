@@ -58,11 +58,9 @@ relocated folder still matches), and on macOS at their fixed English names.
 | `/usr/lib` | subtree | operating-system files |
 | `/usr/libexec` | subtree | operating-system files |
 | `/usr/share` | subtree | operating-system files |
-| `/etc` | subtree | operating-system files |
 | `/dev` | subtree | operating-system files |
 | `/cores` | subtree | operating-system files |
-| `/private/var/db` | subtree | operating-system files |
-| `/private/var/log` | subtree | operating-system files |
+| `/private` | subtree | operating-system files and temporary files (/etc, /tmp and /var resolve here) |
 | `~/Library` | subtree | application data and settings |
 | `~/Applications` | subtree | application data and settings |
 | `~/.Trash` | subtree | application data and settings |
@@ -70,13 +68,10 @@ relocated folder still matches), and on macOS at their fixed English names.
 | `~/Music` | subtree | downloads or media, not code |
 | `~/Pictures` | subtree | downloads or media, not code |
 | `~/Movies` | subtree | downloads or media, not code |
-| `/private` | self | a mount point or scratch root; its children may be projects |
-| `/private/var` | self | a mount point or scratch root; its children may be projects |
-| `/tmp` | self | a mount point or scratch root; its children may be projects |
-| `/usr` | self | a mount point or scratch root; its children may be projects |
-| `/usr/local` | self | a mount point or scratch root; its children may be projects |
-| `/opt` | self | a mount point or scratch root; its children may be projects |
-| `/Volumes` | self | a mount point or scratch root; its children may be projects |
+| `/usr` | self | a mount point; its children may be projects |
+| `/usr/local` | self | a mount point; its children may be projects |
+| `/opt` | self | a mount point; its children may be projects |
+| `/Volumes` | self | a mount point; its children may be projects |
 | `~/Desktop` | self | a user folder; its children may be projects |
 | `~/Documents` | self | a user folder; its children may be projects |
 | `~/Public` | self | a user folder; its children may be projects |
@@ -109,7 +104,8 @@ relocated folder still matches), and on macOS at their fixed English names.
 | `/var/log` | subtree | operating-system files |
 | `/var/cache` | subtree | operating-system files |
 | `/var/spool` | subtree | operating-system files |
-| `/var/tmp` | subtree | operating-system files |
+| `/tmp` | subtree | temporary files, cleared without notice |
+| `/var/tmp` | subtree | temporary files, cleared without notice |
 | `/lost+found` | subtree | operating-system files |
 | `~/.config` | subtree | application data and settings |
 | `~/.local` | subtree | application data and settings |
@@ -118,16 +114,15 @@ relocated folder still matches), and on macOS at their fixed English names.
 | `~/Music (XDG user dir)` | subtree | downloads or media, not code |
 | `~/Pictures (XDG user dir)` | subtree | downloads or media, not code |
 | `~/Videos (XDG user dir)` | subtree | downloads or media, not code |
-| `/usr` | self | a mount point or scratch root; its children may be projects |
-| `/usr/local` | self | a mount point or scratch root; its children may be projects |
-| `/var` | self | a mount point or scratch root; its children may be projects |
-| `/var/www` | self | a mount point or scratch root; its children may be projects |
-| `/opt` | self | a mount point or scratch root; its children may be projects |
-| `/srv` | self | a mount point or scratch root; its children may be projects |
-| `/mnt` | self | a mount point or scratch root; its children may be projects |
-| `/media` | self | a mount point or scratch root; its children may be projects |
-| `/tmp` | self | a mount point or scratch root; its children may be projects |
-| `/root` | self | a mount point or scratch root; its children may be projects |
+| `/usr` | self | a mount point; its children may be projects |
+| `/usr/local` | self | a mount point; its children may be projects |
+| `/var` | self | a mount point; its children may be projects |
+| `/var/www` | self | a mount point; its children may be projects |
+| `/opt` | self | a mount point; its children may be projects |
+| `/srv` | self | a mount point; its children may be projects |
+| `/mnt` | self | a mount point; its children may be projects |
+| `/media` | self | a mount point; its children may be projects |
+| `/root` | self | a mount point; its children may be projects |
 | `~/Desktop (XDG user dir)` | self | a user folder; its children may be projects |
 | `~/Documents (XDG user dir)` | self | a user folder; its children may be projects |
 | `~/Public (XDG user dir)` | self | a user folder; its children may be projects |
@@ -149,7 +144,7 @@ relocated folder still matches), and on macOS at their fixed English names.
 | `~\Music (known folder)` | subtree | downloads or media, not code |
 | `~\Pictures (known folder)` | subtree | downloads or media, not code |
 | `~\Videos (known folder)` | subtree | downloads or media, not code |
-| `%SystemDrive%\` | self | a mount point or scratch root; its children may be projects |
+| `%SystemDrive%\` | self | a mount point; its children may be projects |
 | `~\Desktop (known folder)` | self | a user folder; its children may be projects |
 | `~\Documents (known folder)` | self | a user folder; its children may be projects |
 | `~\OneDrive (known folder)` | self | a user folder; its children may be projects |

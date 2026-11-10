@@ -9,6 +9,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/schema"
 )
 
@@ -17,6 +18,9 @@ import (
 // of sessions for that project. Used by the list-live binary tests.
 func seedLiveSessionsDB(t *testing.T, cfgDir, projectPath string, sessions []sessionSeed) {
 	t.Helper()
+	if err := monitor.FreeTestTempTree(cfgDir); err != nil {
+		t.Fatal(err)
+	}
 	dbPath := filepath.Join(cfgDir, "endless.db")
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {

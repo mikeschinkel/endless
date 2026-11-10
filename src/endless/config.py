@@ -244,13 +244,17 @@ def registration_refusal(path: Path) -> str | None:
     return None
 
 
-def is_home_or_above(path: Path) -> bool:
-    """Whether path is $HOME or a directory above it — never a project, by a
-    rule no override reaches (E-2369). Checked here, without a shellout, where
-    a hot path needs only that rule."""
-    home = Path(os.environ.get("HOME", "") or Path.home()).resolve()
-    p = Path(path).resolve()
-    return p == home or p in home.parents
+def ignores_project_config(path: Path) -> bool:
+    """Whether a `.endless/config.json` in path must not name a project: path
+    is disallowed by a rule, or holds another project (E-2369, EQ-59). A copy
+    of a repo, `.endless/` and all, unzipped into ~/Downloads or holding a
+    nested checkout would otherwise act as the project it was copied from.
+
+    A directory INSIDE a project still reads its config: a task worktree sits
+    inside its project's main checkout and names the project by that file.
+    """
+    v = verdict(Path(path))
+    return v["kind"] == DISALLOWED or bool(v.get("encloses"))
 
 
 def add_ignore(path: Path):

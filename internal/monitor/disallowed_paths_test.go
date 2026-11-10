@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -20,8 +21,29 @@ func withTestHome(t *testing.T) string {
 	return home
 }
 
-// writeOverrides writes the user's overrides file into the test's config dir.
+// writeOverrides writes the user's overrides file into the test's config dir,
+// keeping the removals that free the test's temp tree. A body that is not
+// valid JSON is written as given, for the malformed-file test.
 func writeOverrides(t *testing.T, body string) {
+	t.Helper()
+	var ov map[string]any
+	if json.Unmarshal([]byte(body), &ov) == nil {
+		remove, _ := ov["remove"].([]any)
+		for _, r := range TestTempTreeRemovals {
+			remove = append(remove, r)
+		}
+		ov["remove"] = remove
+		data, err := json.Marshal(ov)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body = string(data)
+	}
+	writeOverridesRaw(t, body)
+}
+
+// writeOverridesRaw writes body exactly, so the temp trees are refused again.
+func writeOverridesRaw(t *testing.T, body string) {
 	t.Helper()
 	p := filepath.Join(ConfigDir(), DisallowedOverridesFile)
 	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
@@ -123,18 +145,44 @@ func TestResolveDirectory_SelfAndSubtreeOverrides(t *testing.T) {
 	}
 }
 
-// Removing a built-in entry is how someone who keeps /etc in git opts back in.
+// Removing a built-in entry is how someone who needs a refused tree opts back in.
 func TestResolveDirectory_OverrideRemovesABuiltin(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("/etc is a unix entry")
+		t.Skip("/usr/share is a unix entry")
 	}
 	db := withTestDB(t)
 	withTestHome(t)
-	etc := resolveAbs("/etc")
+	share := resolveAbs("/usr/share")
 
-	wantKind(t, resolve(t, db, etc), VerdictDisallowed)
-	writeOverrides(t, `{"remove": ["/etc"]}`)
-	wantKind(t, resolve(t, db, etc), VerdictNone)
+	wantKind(t, resolve(t, db, share), VerdictDisallowed)
+	writeOverrides(t, `{"remove": ["/usr/share"]}`)
+	wantKind(t, resolve(t, db, share), VerdictNone)
+}
+
+// Temp space is never a project's home (EQ-58): on macOS /private is refused
+// whole, which is where /tmp, /var and $TMPDIR resolve; on Linux /tmp and
+// /var/tmp are.
+func TestResolveDirectory_TempTreesAreRefused(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows temp lives under ~\\AppData, covered by its own entry")
+	}
+	db := withTestDB(t)
+	withTestHome(t)
+	writeOverridesRaw(t, `{}`)
+
+	dirs := []string{mkdirs(t, tempProjectRoot(t), "scratch", "repo")}
+	if runtime.GOOS == "linux" {
+		dirs = append(dirs, "/tmp", "/var/tmp")
+	} else {
+		dirs = append(dirs, resolveAbs("/tmp"), resolveAbs("/etc"), "/private")
+	}
+	for _, d := range dirs {
+		v := resolve(t, db, d)
+		wantKind(t, v, VerdictDisallowed)
+		if v.Scope != ScopeSubtree {
+			t.Errorf("%s: scope = %q, want subtree", d, v.Scope)
+		}
+	}
 }
 
 func TestResolveDirectory_HomeCannotBeRemoved(t *testing.T) {
@@ -269,6 +317,9 @@ func TestReadOverrides_MalformedFileNamesIt(t *testing.T) {
 func TestReadOverrides_WritesASkeletonOnce(t *testing.T) {
 	db := withTestDB(t)
 	home := withTestHome(t)
+	if err := os.Remove(filepath.Join(ConfigDir(), DisallowedOverridesFile)); err != nil {
+		t.Fatal(err)
+	}
 	resolve(t, db, home)
 	data, err := os.ReadFile(filepath.Join(ConfigDir(), DisallowedOverridesFile))
 	if err != nil {
