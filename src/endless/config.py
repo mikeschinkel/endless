@@ -244,19 +244,6 @@ def registration_refusal(path: Path) -> str | None:
     return None
 
 
-def ignores_project_config(path: Path) -> bool:
-    """Whether a `.endless/config.json` in path must not name a project: path
-    is disallowed by a rule, or holds another project (E-2369, EQ-59). A copy
-    of a repo, `.endless/` and all, unzipped into ~/Downloads or holding a
-    nested checkout would otherwise act as the project it was copied from.
-
-    A directory INSIDE a project still reads its config: a task worktree sits
-    inside its project's main checkout and names the project by that file.
-    """
-    v = verdict(Path(path))
-    return v["kind"] == DISALLOWED or bool(v.get("encloses"))
-
-
 def add_ignore(path: Path):
     """Record path as not a project: an ignored projects row (E-2251)."""
     from endless.event_bridge import project_registry

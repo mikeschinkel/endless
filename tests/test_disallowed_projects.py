@@ -160,3 +160,16 @@ def test_a_config_file_inside_a_project_still_names_it(isolated_env):
     (wt / ".endless" / "config.json").write_text(json.dumps({"name": "app"}))
     config.forget_verdicts()
     assert project_name_for_cwd(wt) == "app"
+
+
+def test_a_subdirectory_of_a_project_names_it(isolated_env):
+    # The resolver walks up to the nearest registered project; no config file
+    # is needed below the project root.
+    from endless.project_path import project_name_for_cwd
+
+    app = init_git_repo(isolated_env["projects_root"] / "app")
+    assert _register(app, name="app").exit_code == 0
+    sub = app / "src" / "pkg"
+    sub.mkdir(parents=True)
+    config.forget_verdicts()
+    assert project_name_for_cwd(sub) == "app"

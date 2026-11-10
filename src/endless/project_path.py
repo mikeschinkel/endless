@@ -150,29 +150,27 @@ def match_project_path(path: Path | str) -> str | None:
 
 def project_name_for_cwd(cwd: Path | str) -> str | None:
     """The project name for a working directory, or None if it is in no
-    registered project.
+    project.
 
-    Order matters and is preserved from the six hand-rolled copies this
-    replaced: the on-disk `<cwd>/.endless/config.json` is consulted first (it
-    is the project's own declaration and needs no DB), and only then the
-    registered row whose path denotes cwd.
+    The resolver decides (E-2369, EQ-59): the nearest registered project at or
+    above cwd names it, so a task worktree, or any subdirectory, gets its
+    project's name. A directory that is disallowed, ignored, or holds another
+    project is in none, whatever a `.endless/config.json` in it says, so a repo
+    copied into ~/Downloads does not act as the project it was copied from.
+    Only where no row applies is the on-disk config read: a checkout not yet
+    registered names its project by it.
     """
-    # A directory that cannot be a project (E-2369) is not made one by a
-    # config file in it: a stray ~/.endless/config.json, or a repo copied
-    # into ~/Downloads with its .endless/ (EQ-59).
-    pcfg = (None if config.ignores_project_config(Path(cwd))
-            else config.project_config_read(Path(cwd)))
+    v = config.verdict(Path(cwd))
+    if v["kind"] == "project":
+        return v.get("name")
+    if v["kind"] != "none" or v.get("encloses"):
+        return None
+    pcfg = config.project_config_read(Path(cwd))
     # An unregistered project keeps its config on disk, marked as such; its
     # name no longer names a project (E-2251).
     if pcfg and pcfg.get("name") and pcfg.get("status") != "unregistered":
         return pcfg["name"]
-    stored_path = match_project_path(cwd)
-    if stored_path is None:
-        return None
-    rows = db.query(
-        "SELECT name FROM projects WHERE path = ?", (stored_path,)
-    )
-    return rows[0]["name"] if rows else None
+    return None
 
 
 def project_root(*, strict: bool = False) -> Path | None:

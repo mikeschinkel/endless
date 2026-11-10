@@ -207,11 +207,21 @@ def test_match_returns_none_for_an_unregistered_directory(
 
 # ─── project_name_for_cwd ───────────────────────────────────────────────────
 
-def test_name_for_cwd_reads_the_on_disk_config_first(isolated_env, tmp_path):
+def test_name_for_cwd_prefers_the_registered_row_to_the_config(isolated_env, tmp_path):
+    # The resolver decides (E-2369, EQ-59): a config file that disagrees with
+    # the registered row (hand-edited, or a copied checkout) does not win.
     proj = tmp_path / "proj"
     (proj / ".endless").mkdir(parents=True)
     (proj / ".endless" / "config.json").write_text('{"name": "from-config"}')
     _seed(proj, name="from-db")
+
+    assert project_name_for_cwd(proj) == "from-db"
+
+
+def test_name_for_cwd_reads_the_config_of_an_unregistered_checkout(isolated_env, tmp_path):
+    proj = tmp_path / "proj"
+    (proj / ".endless").mkdir(parents=True)
+    (proj / ".endless" / "config.json").write_text('{"name": "from-config"}')
 
     assert project_name_for_cwd(proj) == "from-config"
 
