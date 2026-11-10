@@ -104,3 +104,9 @@ id = "P19"
 kind = "deliverable"
 statement = "The legend block, a dim rule, the legend and a dim rule, prints above the table as well as below it, so in task show it sits immediately under the '— Plan items —' heading"
 verify = "tests/test_plan_items.py"
+
+[[item]]
+id = "P20"
+kind = "deliverable"
+statement = "The fallback-width test patches plan_items' own get_terminal_size, not the shared shutil module, so pytest's reporter never reads the stub"
+verify = "tests/test_plan_items.py"
