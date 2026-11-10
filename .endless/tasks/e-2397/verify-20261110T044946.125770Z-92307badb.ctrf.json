@@ -1,0 +1,818 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.2.0",
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 73,
+      "passed": 73,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1794286155132,
+      "stop": 1794286186121
+    },
+    "tests": [
+      {
+        "name": "go.mod is tidy without go.work",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "go.mod is tidy without go.work"
+        }
+      },
+      {
+        "name": "TestCheck/no_lock",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbmaint"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestCheck/another_live_process_holds_it",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbmaint"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestCheck/its_holder_has_exited",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbmaint"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestCheck/this_process_holds_it",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbmaint"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestCheck",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbmaint"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestCheck_HonorsAnUnreadableLock",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbmaint"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestAcquire/takes,_then_releases",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbmaint"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestAcquire/refuses_a_live_holder",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbmaint"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestAcquire/takes_over_a_stale_lock",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbmaint"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestAcquire/release_leaves_another_process's_lock_alone",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbmaint"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestAcquire",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbmaint"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestLinkFor/newest_link_that_spans_the_gap",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbmaint"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestLinkFor/a_link_from_below_the_binary_still_undoes_it",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbmaint"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestLinkFor/no_link_reaches_that_far",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbmaint"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestLinkFor/no_link_starts_low_enough",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbmaint"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestLinkFor",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbmaint"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestLinks_AppendReadProtect",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbmaint"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestRecover_CurrentChangesNothing",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbrecover"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestRecover_DryRunNamesBothVersionsAndTheLinkedBackup",
+        "status": "passed",
+        "duration": 370,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbrecover"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestRecover_RestoresAndVerifies",
+        "status": "passed",
+        "duration": 370,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbrecover"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestRecover_WithoutALinkRefusesRatherThanTakeTheNewest",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbrecover"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestRecover_FailurePartwayClearsTheLock",
+        "status": "passed",
+        "duration": 400,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbrecover"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestRecover_NamesAHeldHandleAndClearsTheLock",
+        "status": "passed",
+        "duration": 1850,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbrecover"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestInstall_ThePathIsNeverEmpty",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbrecover"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestVerify_ReportsARestoredCopyThatDiffersFromItsBackup",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbrecover"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestRecover_NamesTheLandCommandForALandableBranch",
+        "status": "passed",
+        "duration": 200,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/dbrecover"
+        ],
+        "labels": {
+          "check": "lock, links and recovery (Go)"
+        }
+      },
+      {
+        "name": "TestDB_UnderTheLockRefusesWithoutCreatingADatabase",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/monitor"
+        ],
+        "labels": {
+          "check": "the connect honors the lock and links its backup (Go)"
+        }
+      },
+      {
+        "name": "TestDB_LetsGoOfItsConnectionUnderTheLockAndReconnectsAfter",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/monitor"
+        ],
+        "labels": {
+          "check": "the connect honors the lock and links its backup (Go)"
+        }
+      },
+      {
+        "name": "TestDB_IgnoresALockWhoseHolderHasExited",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/monitor"
+        ],
+        "labels": {
+          "check": "the connect honors the lock and links its backup (Go)"
+        }
+      },
+      {
+        "name": "TestBackupDB_RefusesUnderTheLock",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/monitor"
+        ],
+        "labels": {
+          "check": "the connect honors the lock and links its backup (Go)"
+        }
+      },
+      {
+        "name": "TestConnect_BehindLinksAFreshPreMigrationBackup",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/monitor"
+        ],
+        "labels": {
+          "check": "the connect honors the lock and links its backup (Go)"
+        }
+      },
+      {
+        "name": "TestPruneBackups_KeepsALinkedBackupOverANewerOneInItsHour",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/monitor"
+        ],
+        "labels": {
+          "check": "the connect honors the lock and links its backup (Go)"
+        }
+      },
+      {
+        "name": "TestMigrateExecutable_LinksNothingButTheMigrationMachinery",
+        "status": "passed",
+        "duration": 170,
+        "suite": [
+          "github.com/mikeschinkel/endless/cmd/endless-migrate"
+        ],
+        "labels": {
+          "check": "endless-migrate links only migration machinery"
+        }
+      },
+      {
+        "name": "tests/test_db_recover.py::test_get_db_refuses_under_the_lock_without_creating_a_database",
+        "status": "passed",
+        "duration": 181,
+        "suite": [
+          "tests/test_db_recover.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_recover.py::test_get_db_ignores_a_lock_whose_holder_has_exited",
+        "status": "passed",
+        "duration": 57,
+        "suite": [
+          "tests/test_db_recover.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_recover.py::test_cli_recover_says_there_is_nothing_to_recover",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "tests/test_db_recover.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_recover.py::test_cli_recover_dry_run_names_both_versions_and_the_linked_backup",
+        "status": "passed",
+        "duration": 448,
+        "suite": [
+          "tests/test_db_recover.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_recover.py::test_cli_recover_restores_the_pre_migration_backup",
+        "status": "passed",
+        "duration": 440,
+        "suite": [
+          "tests/test_db_recover.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_journal_mode_reads_wal_and_rollback_from_header",
+        "status": "passed",
+        "duration": 63,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_journal_mode_classifies_non_databases",
+        "status": "passed",
+        "duration": 97,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_journal_mode_takes_no_lock_on_a_locked_database",
+        "status": "passed",
+        "duration": 111,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_resolve_backup_defaults_to_the_newest",
+        "status": "passed",
+        "duration": 98,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_resolve_backup_accepts_a_path_or_a_bare_filename",
+        "status": "passed",
+        "duration": 91,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_resolve_backup_with_no_backups_names_the_directory",
+        "status": "passed",
+        "duration": 66,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_resolve_backup_rejects_a_missing_name",
+        "status": "passed",
+        "duration": 66,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_check_backup_accepts_a_sound_endless_database",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_check_backup_refuses_unusable_files[missing]",
+        "status": "passed",
+        "duration": 75,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_check_backup_refuses_unusable_files[empty]",
+        "status": "passed",
+        "duration": 82,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_check_backup_refuses_unusable_files[junk]",
+        "status": "passed",
+        "duration": 107,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_check_backup_refuses_unusable_files[truncated]",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_check_backup_refuses_a_foreign_sqlite_database",
+        "status": "passed",
+        "duration": 67,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_check_backup_does_not_modify_the_backup",
+        "status": "passed",
+        "duration": 89,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_holders_of_finds_an_open_handle_by_pid_and_command",
+        "status": "passed",
+        "duration": 279,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_holders_of_excludes_this_process",
+        "status": "passed",
+        "duration": 430,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_restore_refuses_while_the_database_is_open",
+        "status": "passed",
+        "duration": 103,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_restore_refuses_when_holders_cannot_be_determined",
+        "status": "passed",
+        "duration": 123,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_restore_refuses_a_bad_backup_before_touching_anything",
+        "status": "passed",
+        "duration": 95,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_force_restores_despite_holders",
+        "status": "passed",
+        "duration": 184,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_restore_replaces_the_database_and_re_establishes_wal",
+        "status": "passed",
+        "duration": 170,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_restore_keeps_the_pre_restore_database_aside",
+        "status": "passed",
+        "duration": 177,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_pre_restore_files_stay_out_of_the_rotated_backups_directory",
+        "status": "passed",
+        "duration": 91,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_restore_moves_stale_sidecars_aside",
+        "status": "passed",
+        "duration": 110,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_restore_works_when_the_target_is_gone",
+        "status": "passed",
+        "duration": 94,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_restore_does_not_migrate_the_restored_database",
+        "status": "passed",
+        "duration": 117,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_a_failed_swap_is_relayed_as_go_raised_it",
+        "status": "passed",
+        "duration": 68,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_restore_takes_and_releases_the_maintenance_lock",
+        "status": "passed",
+        "duration": 96,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_dry_run_reports_holders_and_journal_modes_and_changes_nothing",
+        "status": "passed",
+        "duration": 59,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_dry_run_reports_unknown_holders_honestly",
+        "status": "passed",
+        "duration": 61,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_cli_db_restore_dry_run",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_cli_db_restore_refusal_exits_nonzero",
+        "status": "passed",
+        "duration": 84,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "tests/test_db_restore.py::test_cli_db_restore_enforces_the_worktree_db_gate",
+        "status": "passed",
+        "duration": 71,
+        "suite": [
+          "tests/test_db_restore.py"
+        ],
+        "labels": {
+          "check": "db recover and db restore (Python)"
+        }
+      },
+      {
+        "name": "openers during a real recovery window",
+        "status": "passed",
+        "duration": 7712,
+        "labels": {
+          "check": "openers during a real recovery window"
+        }
+      }
+    ]
+  }
+}
