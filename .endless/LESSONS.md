@@ -8097,3 +8097,7 @@ On E-2353 the planner chose to join a plan item's statement, verify and detail i
 ### [2026-11-10] Brainstorm with Mike instead of funneling to decisions
 During /needs-plan for E-2592 (--base-dir flag), I kept presenting option tables and pressing Mike to pick answers. Mike said I 'continue to focus on me answering questions to finalize decisions rather than brainstorm with me'. When Mike is exploring a question (raising his own intuition, asking whether a concern is real), explore it with him: lay out the mechanics, what his idea would look like, what's unknown, before reducing it to options to choose. Applies to this planning conversation; ask before treating it as a rule for every /needs-plan.
 - **Project**: endless
+
+### [2026-11-11] Phase next is deprecated; only now or later
+While planning E-2592 and E-2594 (2026-11-11) I offered phase next for E-2594 and E-2595. Mike: 'next is deprecated; only now or later.' When proposing or setting a task's phase, choose now or later. In the same exchange Mike clarified that his 'absolutely sure' about tests never reaching a live HOME meant 'pragmatically absolutely sure': guard against realistic accidents, not every conceivable path.
+- **Project**: endless
