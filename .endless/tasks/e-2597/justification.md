@@ -1,0 +1,1 @@
+How go-fsfix should change, and what Endless's hand-rolled Go fixtures need from it, are open design questions for Mike to answer before any todo can be planned
