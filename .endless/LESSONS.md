@@ -8101,3 +8101,7 @@ During /needs-plan for E-2592 (--base-dir flag), I kept presenting option tables
 ### [2026-11-11] Phase next is deprecated; only now or later
 While planning E-2592 and E-2594 (2026-11-11) I offered phase next for E-2594 and E-2595. Mike: 'next is deprecated; only now or later.' When proposing or setting a task's phase, choose now or later. In the same exchange Mike clarified that his 'absolutely sure' about tests never reaching a live HOME meant 'pragmatically absolutely sure': guard against realistic accidents, not every conceivable path.
 - **Project**: endless
+
+### [2026-11-11] Complexity covers redesign, not only interaction
+While rating E-2592 (2026-11-11) I quoted task add --help's definition of complexity ('how much human-AI interaction nailing down the specifics takes') as settled and proposed lowering it because the migration was 'mechanical'. That definition was written by an agent in an earlier session, not by Mike. Mike: complexity should represent the size of a change IN ADDITION TO the interaction needed; a 1000-call rename from Foo() to Bar() is not complex, but a change that requires every test to be redesigned to conform to changes in the testing framework IS complex. Also: don't pick an option because it is 'simpler' if it fundamentally changes the architecture of a package (here go-fsfix).
+- **Project**: endless
