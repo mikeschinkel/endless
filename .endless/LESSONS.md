@@ -8105,3 +8105,7 @@ While planning E-2592 and E-2594 (2026-11-11) I offered phase next for E-2594 an
 ### [2026-11-11] Complexity covers redesign, not only interaction
 While rating E-2592 (2026-11-11) I quoted task add --help's definition of complexity ('how much human-AI interaction nailing down the specifics takes') as settled and proposed lowering it because the migration was 'mechanical'. That definition was written by an agent in an earlier session, not by Mike. Mike: complexity should represent the size of a change IN ADDITION TO the interaction needed; a 1000-call rename from Foo() to Bar() is not complex, but a change that requires every test to be redesigned to conform to changes in the testing framework IS complex. Also: don't pick an option because it is 'simpler' if it fundamentally changes the architecture of a package (here go-fsfix).
 - **Project**: endless
+
+### [2026-11-11] go-fsfix allows several root fixtures per test
+While planning E-2592 (2026-11-11) I told Mike go-fsfix's model is 'one root fixture per test' and built an argument on it. Mike: there is no reason a test can't have two or more fixtures; most don't need it, some do. go-fsfix's README and code don't restrict it: each NewRootFixture makes its own MkdirTemp directory. Check a package's code before describing its architecture.
+- **Project**: endless
