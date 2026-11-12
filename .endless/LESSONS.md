@@ -8113,3 +8113,7 @@ While planning E-2592 (2026-11-11) I told Mike go-fsfix's model is 'one root fix
 ### [2026-11-12] The 'never read LESSONS.md' rule is about context, not inspection
 While discussing whether published LESSONS.md files could leak secrets, I declined to check the file because the rule says never read it. Mike said the rule covers the general case: it exists to keep the lessons out of my context, not to stop me inspecting the file when a task needs it (here, scanning it for secrets).
 - **Project**: endless
+
+### [2026-11-12] Determinism is required where a wrong answer breaks a process, not for best-effort filters
+Discussing a write-time secret check for Endless, I said a pattern-matching check was the kind of non-deterministic gate Mike doesn't want. Mike said I mistook his intent: determinism is required when a false positive or false negative causes problems in a process (like the plan-reconciliation gate). A filter that removes some bad content, where partial removal beats none, does not fall under that guideline.
+- **Project**: endless
