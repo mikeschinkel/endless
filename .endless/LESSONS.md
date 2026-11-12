@@ -8109,3 +8109,7 @@ While rating E-2592 (2026-11-11) I quoted task add --help's definition of comple
 ### [2026-11-11] go-fsfix allows several root fixtures per test
 While planning E-2592 (2026-11-11) I told Mike go-fsfix's model is 'one root fixture per test' and built an argument on it. Mike: there is no reason a test can't have two or more fixtures; most don't need it, some do. go-fsfix's README and code don't restrict it: each NewRootFixture makes its own MkdirTemp directory. Check a package's code before describing its architecture.
 - **Project**: endless
+
+### [2026-11-12] The 'never read LESSONS.md' rule is about context, not inspection
+While discussing whether published LESSONS.md files could leak secrets, I declined to check the file because the rule says never read it. Mike said the rule covers the general case: it exists to keep the lessons out of my context, not to stop me inspecting the file when a task needs it (here, scanning it for secrets).
+- **Project**: endless
