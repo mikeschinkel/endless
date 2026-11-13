@@ -1,0 +1,1 @@
+The publish-or-keep brainstorm needs a complete, checked inventory across several write paths before it can decide anything; that is its own body of work, not a step inside a do-task.
