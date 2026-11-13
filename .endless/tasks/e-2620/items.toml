@@ -43,3 +43,8 @@ statement = "Does not change git_hook.setup's choice of lefthook-local.yml or le
 id = "P8"
 kind = "exclusion"
 statement = "Does not rewrite history in projects already initialized"
+
+[[item]]
+id = "P9"
+kind = "deliverable"
+statement = "Tidy go.mod's indirect go-cliutil requirement (v0.4.0 to v0.5.1), which main also has untidy and the verify runner's tidy row refuses"
