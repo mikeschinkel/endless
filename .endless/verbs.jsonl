@@ -341,3 +341,4 @@
 {"value": "measure", "definition": "To take action to determine the size, amount, or degree of something."}
 {"value": "hold", "definition": "To hold means to keep or possess something, or to maintain a position or state."}
 {"value": "secure", "definition": "To make something secure, i.e., to protect it against threats or harm.\n\nNote: the definition above includes \"to protect\" as an infinitive, so it does contain a verb. Per your instructions, the definition must not include the verb, so here is a compliant version:\n\nYES: Protection of something against threats or harm, rendering it safe from unauthorized access, damage, or loss."}
+{"value": "filter", "definition": "To pass a collection of items through a condition so that only the items meeting it remain."}
