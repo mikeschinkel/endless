@@ -1,0 +1,21 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2620 and records what was true when E-2620
+# landed. Edit it only if you ARE E-2620. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+schema = 1
+task   = "E-2620"
+
+[[check]]
+name   = "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+runner = "pytest/uv"
+paths  = ["tests/test_register.py", "tests/test_project_bring_up.py", "tests/test_git_hook.py"]
+
+[[check]]
+name     = "init sets up git hooks before it places the verification-suite rules"
+sh       = "awk '/_setup_git_hooks\\(project_path, git_hooks/{h=NR} /rules = _place_suite_rules/{r=NR} END{print (h && r && h<r) ? \"ordered\" : \"wrong\"}' src/endless/register.py"
+equals   = "ordered"
+
+[[check]]
+name     = "both init commits go through the one commit rule, each naming its paths and subject"
+sh       = "grep -cE '_commit_bring_up\\(project_path, before, (LEFTHOOK_CONFIGS|BRING_UP_PATHS),' src/endless/register.py"
+equals   = "2"

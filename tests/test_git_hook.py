@@ -360,6 +360,7 @@ def test_project_init_commits_the_lefthook_yml_it_creates(isolated_env,
     _no_lefthook(monkeypatch)
     proj = git_repo(isolated_env["projects_root"] / "lh")
     register_project(proj, infer=True, git_hooks="lefthook")
-    committed = _git(proj, "show", "--name-only", "--format=", "HEAD").stdout
-    assert "lefthook.yml" in committed.split()
+    # In a commit of its own, made first (E-2620): tracked at HEAD.
+    tracked = _git(proj, "ls-tree", "--name-only", "HEAD").stdout
+    assert "lefthook.yml" in tracked.split()
     assert _git(proj, "status", "--porcelain").stdout == ""

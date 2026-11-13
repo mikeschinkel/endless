@@ -371,6 +371,15 @@ def register_project(
             + " .gitignore updated with "
             + click.style(", ".join(added), dim=True)
         )
+    # lefthook's config is committed before anything else init commits, so
+    # every commit init makes holds it. Replayed onto a base without it, as a
+    # `git pull --rebase` onto a remote's initial commit does, a commit made
+    # before it would run lefthook's hook with no config (E-2620).
+    _setup_git_hooks(project_path, git_hooks, interactive=not infer)
+    if _at_repo_root(project_path):
+        _commit_bring_up(project_path, before, LEFTHOOK_CONFIGS,
+                         LEFTHOOK_COMMIT_SUBJECT)
+
     rules = _place_suite_rules(name, project_path)
 
     pointer_file = scaffold_guide_pointer(project_path)
@@ -383,9 +392,8 @@ def register_project(
 
     _scaffold_output_style(project_path)
 
-    _setup_git_hooks(project_path, git_hooks, interactive=not infer)
-
-    _commit_bring_up(project_path, before)
+    _commit_bring_up(project_path, before, BRING_UP_PATHS,
+                     BRING_UP_COMMIT_SUBJECT)
     if rules["action"] != "edited":
         _update_worktree_rules(name, project_path)
 
@@ -572,6 +580,10 @@ ENDLESS_OWNED = (
 )
 USER_OWNED = (".gitignore",) + INSTRUCTION_FILES + LEFTHOOK_CONFIGS
 BRING_UP_COMMIT_SUBJECT = "Endless: bring project up to Endless usage"
+# lefthook's config gets a commit of its own, made first (E-2620).
+LEFTHOOK_COMMIT_SUBJECT = "Endless: set up lefthook for the Endless-Task trailer"
+BRING_UP_PATHS = tuple(p for p in ENDLESS_OWNED + USER_OWNED
+                       if p not in LEFTHOOK_CONFIGS)
 
 
 def _git(project_path: Path, *args: str) -> subprocess.CompletedProcess:
@@ -647,17 +659,24 @@ def _commit_candidates_status(project_path: Path) -> dict:
     }
 
 
-def _commit_bring_up(project_path: Path, before: dict) -> None:
-    """Commit what this run changed, by the rule in ENDLESS_OWNED's comment.
+def _at_repo_root(project_path: Path) -> bool:
+    top = _git(project_path, "rev-parse", "--show-toplevel")
+    return (top.returncode == 0
+            and resolved(Path(top.stdout.strip())) == project_path)
+
+
+def _commit_bring_up(project_path: Path, before: dict, paths,
+                     subject: str) -> None:
+    """Commit what this run changed among `paths`, as `subject`, by the rule
+    in ENDLESS_OWNED's comment.
 
     Only on the project's default branch. Every changed file left out is
     listed with why, so the user knows what is theirs to commit.
     """
-    after = _status(project_path, ENDLESS_OWNED + USER_OWNED)
+    after = _status(project_path, paths)
     if not after:
         return
-    top = _git(project_path, "rev-parse", "--show-toplevel")
-    if top.returncode != 0 or resolved(Path(top.stdout.strip())) != project_path:
+    if not _at_repo_root(project_path):
         # git reports paths from the repository's root, so a project in a
         # subdirectory would match none of them; say so rather than guess.
         click.echo(
@@ -680,8 +699,7 @@ def _commit_bring_up(project_path: Path, before: dict) -> None:
             commit.append(path)
     if commit:
         try:
-            main_commit.commit_paths(project_path, commit,
-                                     BRING_UP_COMMIT_SUBJECT)
+            main_commit.commit_paths(project_path, commit, subject)
             click.echo(
                 click.style("•", fg="cyan")
                 + " Committed "
