@@ -8117,3 +8117,7 @@ While discussing whether published LESSONS.md files could leak secrets, I declin
 ### [2026-11-12] Determinism is required where a wrong answer breaks a process, not for best-effort filters
 Discussing a write-time secret check for Endless, I said a pattern-matching check was the kind of non-deterministic gate Mike doesn't want. Mike said I mistook his intent: determinism is required when a false positive or false negative causes problems in a process (like the plan-reconciliation gate). A filter that removes some bad content, where partial removal beats none, does not fall under that guideline.
 - **Project**: endless
+
+### [2026-11-13] Read the reflog before inferring commit order from file times
+Filing E-2620, I read go-filesys's file modification times and concluded that endless project init committed before writing lefthook.yml. The reflog showed otherwise: init's two commits had been replayed by a git pull --rebase, which reset their times and briefly removed the tracked lefthook.yml from the working tree. When diagnosing what ran in what order in a repo, read git reflog first; file times and commit dates change on rebase.
+- **Project**: endless
