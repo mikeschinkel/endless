@@ -21,7 +21,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
-	github.com/mikeschinkel/go-cliutil v0.4.0 // indirect
+	github.com/mikeschinkel/go-cliutil v0.5.1 // indirect
 	github.com/mikeschinkel/go-dt/appinfo v0.4.0 // indirect
 	github.com/mikeschinkel/go-dt/dtx v0.3.0 // indirect
 	github.com/mikeschinkel/go-logutil v0.2.1 // indirect
