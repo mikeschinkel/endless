@@ -1,0 +1,11 @@
+What goes: the `--unattended` option on `task claim`, the branch in claim_item that lets a claim proceed with no resolvable session, and the refusal text printed when Endless's task-session server is not running, which currently offers `--unattended` as the way forward. A claim that resolves no session refuses and names the two real routes: run the claim from the session that will work the task, or `task spawn` it.
+
+What stays: spawn's internal pre-claim passes no session to the shared claim helper because the session it is about to launch does not exist yet, and SessionStart binds it seconds later. That window is a separate concern and is not this task; it is worth noting in the analysis that a launch failure inside that window strands the same shape, so the pre-claim ordering may deserve its own task.
+
+The invariant to state in the guide: a task is underway only while a session holds it (sessions.task_id). Every path that sets underway binds a session in the same step or, for spawn, in the launch that follows.
+
+The need the flag was serving, a worktree to hold the user's own edits without anyone working the task, is real and is not met by claim. It belongs to the user-driven-changes brainstorm, which already lists "move code already in the default branch working tree into a worktree" as a thing to settle. A worktree verb that leaves status alone is the shape to expect from there.
+
+Existing tasks already in the state: list underway tasks with no row in sessions.task_id and report them, so Mike can spawn or reopen each. At the time of filing that list is E-2540 in gomion plus pre-ledger endless tasks from the 2026-09-30 migration, which may be a different story.
+
+Tests: the claim refuses from a plain shell with no session and from a session bound to another task; the refusal text no longer mentions `--unattended`; spawn still works end to end.
