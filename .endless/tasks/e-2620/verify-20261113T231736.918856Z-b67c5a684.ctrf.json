@@ -1,0 +1,562 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.2.0",
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 50,
+      "passed": 50,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1794611845212,
+      "stop": 1794611876612
+    },
+    "tests": [
+      {
+        "name": "go.mod is tidy without go.work",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "go.mod is tidy without go.work"
+        }
+      },
+      {
+        "name": "tests/test_register.py::test_validate_name_accepts_valid",
+        "status": "passed",
+        "duration": 356,
+        "suite": [
+          "tests/test_register.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_register.py::test_validate_name_rejects_invalid",
+        "status": "passed",
+        "duration": 59,
+        "suite": [
+          "tests/test_register.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_register.py::test_register_creates_config_and_db_entry",
+        "status": "passed",
+        "duration": 1268,
+        "suite": [
+          "tests/test_register.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_register.py::test_register_with_explicit_fields",
+        "status": "passed",
+        "duration": 1358,
+        "suite": [
+          "tests/test_register.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_register.py::test_register_update_existing",
+        "status": "passed",
+        "duration": 1670,
+        "suite": [
+          "tests/test_register.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_register.py::test_register_detects_group_name",
+        "status": "passed",
+        "duration": 1354,
+        "suite": [
+          "tests/test_register.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_register.py::test_init_commits_lefthook_yml_first",
+        "status": "passed",
+        "duration": 657,
+        "suite": [
+          "tests/test_register.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_register.py::test_rebased_init_commits_see_lefthook_yml",
+        "status": "passed",
+        "duration": 1009,
+        "suite": [
+          "tests/test_register.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_register.py::test_a_lefthook_yml_with_user_changes_is_left_out_once",
+        "status": "passed",
+        "duration": 707,
+        "suite": [
+          "tests/test_register.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_gitignore_entries_include_logs",
+        "status": "passed",
+        "duration": 102,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_rerun_on_an_older_gitignore_adds_only_the_missing_lines",
+        "status": "passed",
+        "duration": 91,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_every_endless_path_the_source_names_is_classified",
+        "status": "passed",
+        "duration": 233,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_init_refuses_a_linked_worktree_and_writes_nothing",
+        "status": "passed",
+        "duration": 1287,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_init_refuses_a_directory_under_endless_worktrees",
+        "status": "passed",
+        "duration": 1196,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_guide_pointer_creates_claude_md_when_neither_file_exists",
+        "status": "passed",
+        "duration": 56,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_guide_pointer_appends_to_an_existing_file_without_it",
+        "status": "passed",
+        "duration": 64,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_guide_pointer_leaves_a_file_that_mentions_it_alone",
+        "status": "passed",
+        "duration": 57,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_bring_up_commits_what_it_wrote_and_a_rerun_changes_nothing",
+        "status": "passed",
+        "duration": 1269,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_a_never_committed_config_is_committed",
+        "status": "passed",
+        "duration": 1183,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_user_files_with_their_own_changes_are_left_out",
+        "status": "passed",
+        "duration": 1378,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_init_does_nothing_off_the_default_branch",
+        "status": "passed",
+        "duration": 209,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_message_commit_gets_trailer_and_keeps_subject",
+        "status": "passed",
+        "duration": 1085,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_editor_commit_gets_trailer",
+        "status": "passed",
+        "duration": 892,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_empty_editor_message_still_aborts",
+        "status": "passed",
+        "duration": 704,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_existing_trailer_is_not_doubled",
+        "status": "passed",
+        "duration": 1110,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_no_trailer_off_task_branches",
+        "status": "passed",
+        "duration": 1402,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_task_worktree_commit_gets_trailer",
+        "status": "passed",
+        "duration": 843,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_hook_command_exits_zero_on_failure",
+        "status": "passed",
+        "duration": 265,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_commit_succeeds_without_endless_installed",
+        "status": "passed",
+        "duration": 521,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_manager_line_succeeds_without_endless",
+        "status": "passed",
+        "duration": 63,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_inspect_classifies_managers",
+        "status": "passed",
+        "duration": 297,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_inspect_outside_git_is_none",
+        "status": "passed",
+        "duration": 79,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_plain_setup_is_idempotent_and_marked",
+        "status": "passed",
+        "duration": 170,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_infer_without_choice_writes_plain_hooks",
+        "status": "passed",
+        "duration": 136,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_declined_lefthook_leaves_existing_hooks_alone",
+        "status": "passed",
+        "duration": 152,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_lefthook_local_setup_without_lefthook",
+        "status": "passed",
+        "duration": 168,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_lefthook_committed_setup_guards_endless",
+        "status": "passed",
+        "duration": 150,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_lefthook_file_listing_the_event_is_left_for_the_user",
+        "status": "passed",
+        "duration": 152,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_lefthook_never_claims_a_foreign_hook_event",
+        "status": "passed",
+        "duration": 174,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_migration_runs_renamed_hooks_from_local",
+        "status": "passed",
+        "duration": 157,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_husky_gets_lines_and_no_edits",
+        "status": "passed",
+        "duration": 206,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_other_manager_cannot_be_confirmed",
+        "status": "passed",
+        "duration": 151,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_copy_lefthook_local_copies_only_untracked",
+        "status": "passed",
+        "duration": 174,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_status_command_exit_codes",
+        "status": "passed",
+        "duration": 536,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_real_lefthook_adds_trailer_in_a_task_worktree",
+        "status": "passed",
+        "duration": 1575,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_project_init_sets_up_plain_hooks",
+        "status": "passed",
+        "duration": 1180,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_project_init_commits_the_lefthook_yml_it_creates",
+        "status": "passed",
+        "duration": 467,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "init commits lefthook.yml first, a rebase onto an unrelated root finds it for every replayed commit, and a user-edited lefthook.yml is left out and named once"
+        }
+      },
+      {
+        "name": "init sets up git hooks before it places the verification-suite rules",
+        "status": "passed",
+        "duration": 8,
+        "labels": {
+          "check": "init sets up git hooks before it places the verification-suite rules"
+        }
+      },
+      {
+        "name": "both init commits go through the one commit rule, each naming its paths and subject",
+        "status": "passed",
+        "duration": 7,
+        "labels": {
+          "check": "both init commits go through the one commit rule, each naming its paths and subject"
+        }
+      }
+    ]
+  }
+}
