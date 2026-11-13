@@ -1,0 +1,1 @@
+Mike, 2026-11-12, setting up go-goutil: 'none' reads as install no hooks, but it installs the Endless-Task trailer through a plain Git hook file; only the lefthook alternative is the other choice. A name such as plain or file would say so. The help text already describes the behaviour correctly, so the slug is the only defect.
