@@ -1,1 +1,1 @@
-Mike found the gap on 2026-11-02 in gomion E-2540 planning when his own uncommitted edits across four repos had no path into task worktrees; the shape of the workflow is his to set before any tooling
+Mike found the gap on 2026-11-02 in gomion E-2540 planning when his own uncommitted edits across four repos had no path into Endless; a session then worked around it with unattended claims that left four tasks underway with no session. The shape of the workflow is his to set before any tooling
