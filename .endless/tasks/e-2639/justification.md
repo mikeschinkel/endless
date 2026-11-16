@@ -1,0 +1,1 @@
+Which records hold SHAs, and whether each should survive, be remapped or be repaired after a rewrite, are open design questions that need discussion before any work can be planned.
