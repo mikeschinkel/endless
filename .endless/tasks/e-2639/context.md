@@ -16,3 +16,8 @@ Endless has recorded.
 
 This is not limited to secrets in `.endless/`: the file that forces the
 rewrite can be anywhere in the project.
+
+That binary is still in gomion's history and stays there until Endless has a
+command that removes a file from history and keeps its own records intact.
+Once that command exists, use it to remove `cmd/gomion/gomion` from gomion's
+history, on its remote as well.
