@@ -1,0 +1,1 @@
+From the E-2632 brainstorm. Recording a post-land item today needs endless task reconcile, which hands over a verdict file to fill in: an agent's tool, not a person's. Mike asked for a simple command for user-owned items.
