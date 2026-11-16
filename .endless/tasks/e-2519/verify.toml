@@ -52,7 +52,7 @@ contains = '["tmux", "-S", tasks[0], *args]'
 
 [[check]]
 name = "no bare tmux invocation remains in session_cmd"
-sh   = "test \"$(grep -c '\[\"tmux\",' src/endless/session_cmd.py)\" = 1"
+sh   = "test \"$(grep -c '\\[\"tmux\",' src/endless/session_cmd.py)\" = 1"
 
 # The Go reader scopes pane ids to the task-session server's identity.
 [[check]]
