@@ -8121,3 +8121,7 @@ Discussing a write-time secret check for Endless, I said a pattern-matching chec
 ### [2026-11-13] Read the reflog before inferring commit order from file times
 Filing E-2620, I read go-filesys's file modification times and concluded that endless project init committed before writing lefthook.yml. The reflog showed otherwise: init's two commits had been replayed by a git pull --rebase, which reset their times and briefly removed the tracked lefthook.yml from the working tree. When diagnosing what ran in what order in a repo, read git reflog first; file times and commit dates change on rebase.
 - **Project**: endless
+
+### [2026-11-15] Don't present a seed's recommendation as something already decided
+In the E-2632 brainstorm I said Option C (land pings the claiming session's pane) had been 'waved off as too risky'. In fact only the seed author (an agent) had listed cons and recommended B; Mike had decided nothing. Mike asked 'when did I decide it was too risky?'. A seed's pros/cons table and recommendation are an agent's proposal, not the user's decision, so describe them as 'the seed recommends' and keep every option open until the user picks.
+- **Project**: endless
