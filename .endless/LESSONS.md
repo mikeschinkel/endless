@@ -8125,3 +8125,7 @@ Filing E-2620, I read go-filesys's file modification times and concluded that en
 ### [2026-11-15] Don't present a seed's recommendation as something already decided
 In the E-2632 brainstorm I said Option C (land pings the claiming session's pane) had been 'waved off as too risky'. In fact only the seed author (an agent) had listed cons and recommended B; Mike had decided nothing. Mike asked 'when did I decide it was too risky?'. A seed's pros/cons table and recommendation are an agent's proposal, not the user's decision, so describe them as 'the seed recommends' and keep every option open until the user picks.
 - **Project**: endless
+
+### [2026-11-15] Post-land actions: don't assume Endless's own install step
+In the E-2632 brainstorm I proposed that a post-land item needing the installed build just puts 'just install' in its action. Mike said that works for self-dev but not PRODUCT: in someone else's project there may be no install step, or a different one, and Endless cannot know it. Endless's own messages and guidance about post-land items must not assume an install step; any project-specific step belongs in the item's action, written by whoever plans that project's task.
+- **Project**: endless
