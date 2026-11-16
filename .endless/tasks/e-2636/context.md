@@ -1,0 +1,1 @@
+From the E-2632 brainstorm. Steps that recur on every land (Endless's own just install) are project-specific; a Go library has none. Mike considered a hook script that prints the commands (dynamic config) and settled on static config, since an entry can call a script when logic is needed.
