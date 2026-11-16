@@ -14,7 +14,7 @@ Mike's framing went further than the message. Post-land items need an owner and 
 - **Actions.** Each item carries runnable commands alongside its "what will be true" statement. A command looks up values only known after the land, such as a SHA or a run ID, when it runs, so the plan never needs to hold them.
 - **Order.** Post-land items are already an ordered sequence. The land runs the leading cli items and stops at a failure or at the first agent or user item. Recording that item runs the cli items after it. Running independent items in parallel is deferred until it becomes a real concern.
 - **Failure.** A failed cli item stops the sequence and leaves the task `landed`. The output names the failed command and how to rerun it.
-- **Pass/fail (recommendation, for Mike to confirm).** A cli item counts as done on exit 0. Its command must therefore fail when its statement isn't true. A separate check command can come later if that proves insufficient.
+- **Checks.** A cli item needs a required check command that tests its statement, and Endless refuses a cli item without one. Exit 0 alone would rely on the agent remembering to make the command fail. A stdout marker such as "success" moves that same mistake rather than fixing it.
 - **Danger.** Owner `user` covers it. Approving a plan and preferring to run a step yourself are separate things: Mike may approve a release and still want to run it himself. A separate "dangerous" flag is deferred.
 - **Handoff.** Mike is rarely talking with a session when he lands its task. So the land sends agent-owned items into the claiming session's pane as a prompt that includes the reconcile step. If that session isn't running, the land says so and gives the `endless session resume …` command.
 - **The report.** It says first that the land succeeded, then lists only the user's own items with their commands. It no longer says "installed".
@@ -28,9 +28,6 @@ Mike's framing went further than the message. Post-land items need an owner and 
 - Self-dev examples like `just install` must not shape PRODUCT behavior.
 
 ## Follow-ups
-- E-2634: Add owner and action to post-land plan items, and rewrite the guide. Every other follow-up builds on this one.
-- E-2635: Add `task plan done` for user post-land items.
-- E-2636: Add project config for commands run after every land.
-- E-2637: Run cli-owned post-land items in plan order.
-- E-2638: Rewrite the land report and hand items to their owners.
+- E-2634: Give post-land items owners, actions and a runner. It covers the owner/action/check model, the runner, `task plan done`, the land report and handoff, and the guide rewrite. E-2635, E-2637 and E-2638 were folded into it under ED-1550 rule 3 and closed as obsolete.
+- E-2636: Add project config for commands run after every land. It's a separate mechanism, blocked by E-2634.
 - Decisions: ED-1664 (owners and order), ED-1665 (recurring commands in config).
