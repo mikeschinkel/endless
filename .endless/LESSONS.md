@@ -8129,3 +8129,7 @@ In the E-2632 brainstorm I said Option C (land pings the claiming session's pane
 ### [2026-11-15] Post-land actions: don't assume Endless's own install step
 In the E-2632 brainstorm I proposed that a post-land item needing the installed build just puts 'just install' in its action. Mike said that works for self-dev but not PRODUCT: in someone else's project there may be no install step, or a different one, and Endless cannot know it. Endless's own messages and guidance about post-land items must not assume an install step; any project-specific step belongs in the item's action, written by whoever plans that project's task.
 - **Project**: endless
+
+### [2026-11-15] Self-dev concerns must not override PRODUCT in planning
+In the E-2632 brainstorm I noted that Endless's post-land guide defines post-land work in terms of Endless's own self-dev setup (migrations reaching the main database, the locally installed build). Mike said: 'a HUGE problem in your planning is when you allow self_dev concerns override PRODUCT concerns.' He stated it as a general problem in my planning, not just this case. When planning or writing Endless behavior, guidance or messages, design for a user on another machine managing a project that is not Endless first; self-dev needs come second and must not shape what every user sees.
+- **Project**: endless
