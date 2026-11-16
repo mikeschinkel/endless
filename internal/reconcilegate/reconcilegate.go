@@ -227,7 +227,7 @@ func check(db *sql.DB, taskID int64, fingerprint string, mode Mode, to string) (
 			}
 		}
 		if len(differ) > 0 {
-			fail("the plan differs from what the user approved (%s); the user re-approves with `endless task approve`", strings.Join(differ, ", "))
+			fail("the plan differs from what the user approved (%s); the user re-approves with `endless task approve --include-plan-items`", strings.Join(differ, ", "))
 		}
 	}
 
