@@ -8133,3 +8133,7 @@ In the E-2632 brainstorm I proposed that a post-land item needing the installed 
 ### [2026-11-15] Self-dev concerns must not override PRODUCT in planning
 In the E-2632 brainstorm I noted that Endless's post-land guide defines post-land work in terms of Endless's own self-dev setup (migrations reaching the main database, the locally installed build). Mike said: 'a HUGE problem in your planning is when you allow self_dev concerns override PRODUCT concerns.' He stated it as a general problem in my planning, not just this case. When planning or writing Endless behavior, guidance or messages, design for a user on another machine managing a project that is not Endless first; self-dev needs come second and must not shape what every user sees.
 - **Project**: endless
+
+### [2026-11-15] Hear the user's proposal before building on it
+In the E-2632 brainstorm Mike suggested using hooks for recurring post-land steps (install). I read it as a hook that does the work, and argued against it ('Endless can't see what a hook will do'). He meant a script that prints the commands to run on stdout: dynamic config. He had to correct me twice. When the user's suggestion is vague or new, restate what I think they mean and check it before arguing for or against it.
+- **Project**: endless
