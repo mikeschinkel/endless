@@ -67,3 +67,8 @@ statement = "Does not change which server or session a spawn, resume or auto-spa
 id = "P12"
 kind = "exclusion"
 statement = "Does not rename the --session-id flags of endless-go subcommands (event emit, session-query, report-*, correct), which no user types"
+
+[[item]]
+id = "P13"
+kind = "deliverable"
+statement = "session back's spawner fallback and back-stack token use the caller's pane only when the caller is in the task-session server, as the companion resolvers do"
