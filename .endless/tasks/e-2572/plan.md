@@ -87,10 +87,12 @@ sandbox."
   (liveness answers), ED-1627 (socket directories under `/tmp`), ED-1471
   (headless children), ED-1523 (one pane-to-task resolver).
 - E-2519's outcome and its landed code.
-- Tasks already filed from the planning survey: E-2644 (event resolution
-  scopes panes to the ambient server), E-2645 (`resume --tmux-session` runs
-  with no socket), E-2646 (auto-spawn checks clients on the runner's server),
-  E-2647 (companion resolvers send a console pane id to the tasks server).
+- Task already filed from the planning survey: E-2644, one task for the four
+  known sites that still take pane, client or window identity from the
+  caller's server (event resolution for `session touch` and `session task
+  add`, the auto-spawn client check, the companion resolvers, and `resume
+  --tmux-session`). E-2645, E-2646 and E-2647 were merged into it per
+  ED-1550.
 
 ## Deliverables
 
