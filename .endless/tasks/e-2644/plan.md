@@ -21,9 +21,14 @@ the session_status and session_task_membership events behind `session touch`,
 when the caller's pane is on that server; otherwise it returns `sql.ErrNoRows`
 as it does today when no server can be identified. The Python side keeps its
 resolver order (`--session`, then `_current_endless_session_id`, then the raw
-pane); only the pane fallback's meaning changes. The four commands document the
-override as `--session N`; `--session-id` stays accepted as a second spelling
-of the same Click option, so nothing that passes it breaks.
+pane); only the pane fallback's meaning changes. The four commands take the
+override as `--session N` and nothing else: the `--session-id` spelling is
+removed from them, and every caller and test that passed it to one of them is
+updated (`tests/test_session_task_membership.py`, `tests/test_session_status_add.py`;
+a repo-wide search for `--session-id` finds the rest, and ends with none aimed
+at these four). The `--session-id` flags on endless-go subcommands
+(`event emit`, `session-query`, `report-*`, `correct`) are internal and keep
+their names.
 
 **Auto-spawn and triage.** `autospawnjob.resolveTarget` keeps one job: skip
 when no terminal is attached to the task-session server. It asks that server
