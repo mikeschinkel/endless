@@ -1,0 +1,1 @@
+{"v":1,"ts":"60VDSGW045019ZK","kind":"task_dep.created","project":"endless","entity":{"type":"task_dep","id":"2647"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"1421","harness":"claude_cli"},"payload":{"source_id":2647,"target_id":2519,"dep_type":"cleans_up"}}
