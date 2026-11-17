@@ -147,7 +147,8 @@ func quoted(statuses ...taskstatus.Status) string {
 
 // startAllowed is the throttle: one outstanding started session at a time,
 // machine-wide — a resumed session that has not answered, or a spawned fix task
-// not yet unverified or beyond — and a tmux client attached to see it.
+// not yet unverified or beyond — and a tmux client attached to the task-session
+// server to see it.
 func (fx realEffects) startAllowed() (ok bool, why string, err error) {
 	var errorID, fixTask int64
 	var state string
@@ -272,7 +273,8 @@ func (realEffects) updateContext(ctx context.Context, projectPath string, taskID
 }
 
 // spawn starts a session on a fix task exactly as auto-spawn does: detached,
-// into the user's auto_spawn target and placement.
+// in the task-session server's tasks session, at the user's auto_spawn
+// placement.
 func (realEffects) spawn(ctx context.Context, projectPath string, taskID int64) (where string, err error) {
 	w, skip, err := autospawnjob.ResolveWindow()
 	if err != nil {

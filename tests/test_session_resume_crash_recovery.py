@@ -103,7 +103,14 @@ def crash(monkeypatch, tmp_path, stage_transcript):
 
     scene = _Crash()
     stage_transcript("uuid-xyz")
-    monkeypatch.setenv("TMUX", "/tmp/tmux-501/default,1,0")
+    # The resume is typed in a pane of the task window, on the task-session
+    # server: the caller's pane names a window there only from inside it
+    # (E-2644).
+    from endless import tmux_cmd
+    monkeypatch.setattr(tmux_cmd, "tasks_server",
+                        lambda: ("/tmp/endless-501/endless-tasks", "tasks"))
+    session_cmd._tasks_server_cache.clear()
+    monkeypatch.setenv("TMUX", "/tmp/endless-501/endless-tasks,1,0")
     monkeypatch.setenv("TMUX_PANE", _HERE_PANE)
 
     def fake_tmux(args, timeout=2.0):

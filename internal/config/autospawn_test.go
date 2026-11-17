@@ -23,17 +23,17 @@ func TestMerge_AutoSpawnEnabledIsNeverInherited(t *testing.T) {
 	}
 }
 
-// TestMerge_AutoSpawnCadenceInherits: interval and target are the user's, so a
+// TestMerge_AutoSpawnCadenceInherits: interval and placement are the user's, so a
 // project that sets neither sees the user's values.
 func TestMerge_AutoSpawnCadenceInherits(t *testing.T) {
 	project := &EndlessConfig{AutoSpawn: AutoSpawn{Enabled: "on"}}
-	cli := &EndlessConfig{AutoSpawn: AutoSpawn{Interval: "10m", Target: "monitor", Placement: "right"}}
+	cli := &EndlessConfig{AutoSpawn: AutoSpawn{Interval: "10m", Placement: "right"}}
 	merged := project.Merge(cli).(*EndlessConfig)
 	if merged.AutoSpawn.Enabled != "on" {
 		t.Errorf("project's own enabled lost in merge")
 	}
-	if merged.AutoSpawn.Interval != "10m" || merged.AutoSpawn.Target != "monitor" {
-		t.Errorf("cadence = %q/%q, want 10m/monitor", merged.AutoSpawn.Interval, merged.AutoSpawn.Target)
+	if merged.AutoSpawn.Interval != "10m" {
+		t.Errorf("interval = %q, want 10m", merged.AutoSpawn.Interval)
 	}
 	if merged.AutoSpawn.Placement != "right" {
 		t.Errorf("placement = %q, want right inherited from the CLI layer", merged.AutoSpawn.Placement)

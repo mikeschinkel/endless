@@ -1,9 +1,13 @@
 package events
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
+
+	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
 // --- Sentinel session-id resolution (E-1588) ------------------------------
@@ -267,4 +271,61 @@ func TestNullableEq(t *testing.T) {
 			t.Errorf("nullableEq(%v, %q) = %v, want %v", c.col, c.payload, got, c.want)
 		}
 	}
+}
+
+// --- Pane resolution is scoped to the task-session server (E-2644) ---------
+
+// A pane id sent by `session touch` and its siblings names a pane on the
+// task-session server only when the caller is in that server. Typed from the
+// console, the caller's `%88` is a different pane there, and a session bound
+// to `%88` on the caller's own server is not one Endless opened: both resolve
+// to nothing, the way a caller outside tmux does.
+func TestLiveSessionByProcess_ScopesToTheTasksServer(t *testing.T) {
+	const console = "c0501e00"
+
+	t.Run("caller in the tasks server resolves its pane there", func(t *testing.T) {
+		db := newLandingTestDB(t)
+		if _, err := db.Exec(
+			`INSERT INTO sessions (id, session_id, project_id, state, process_id, started_at)
+			 VALUES (5, 'sess-5', 1, 'working', ?, '2026-06-17T00:00:00')`, seedPane(t, db, "%88")); err != nil {
+			t.Fatalf("seed session: %v", err)
+		}
+		id, err := liveSessionByProcessTx(db, "%88")
+		if err != nil || id != 5 {
+			t.Fatalf("liveSessionByProcessTx = %d, %v; want 5", id, err)
+		}
+	})
+
+	t.Run("caller outside does not match the same pane id on the tasks server", func(t *testing.T) {
+		db := newLandingTestDB(t)
+		if _, err := db.Exec(
+			`INSERT INTO sessions (id, session_id, project_id, state, process_id, started_at)
+			 VALUES (5, 'sess-5', 1, 'working', ?, '2026-06-17T00:00:00')`, seedPane(t, db, "%88")); err != nil {
+			t.Fatalf("seed session: %v", err)
+		}
+		t.Cleanup(monitor.SetTestCallerOutsideTasksServer(console))
+		id, err := liveSessionByProcessTx(db, "%88")
+		if !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("liveSessionByProcessTx = %d, %v; want sql.ErrNoRows", id, err)
+		}
+	})
+
+	t.Run("caller outside does not match a session on its own server", func(t *testing.T) {
+		db := newLandingTestDB(t)
+		seedPane(t, db, "%1") // pins the tasks server
+		pid, err := monitor.SeedPaneProcess(db, console, "%88")
+		if err != nil {
+			t.Fatalf("seed console pane: %v", err)
+		}
+		if _, err := db.Exec(
+			`INSERT INTO sessions (id, session_id, project_id, state, process_id, started_at)
+			 VALUES (6, 'sess-6', 1, 'working', ?, '2026-06-17T00:00:00')`, pid); err != nil {
+			t.Fatalf("seed session: %v", err)
+		}
+		t.Cleanup(monitor.SetTestCallerOutsideTasksServer(console))
+		id, err := liveSessionByProcessTx(db, "%88")
+		if !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("liveSessionByProcessTx = %d, %v; want sql.ErrNoRows", id, err)
+		}
+	})
 }

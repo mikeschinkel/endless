@@ -287,14 +287,14 @@ def test_prime_launches_detached_and_claims_nothing(seeded_project_at_cwd, prime
     calls, rendered, wt, arm = prime_env
     item_id = task_cmd.add_item(title="Fix a thing", description="d", plan="# Plan")
     arm()
-    task_cmd.prime_task(item_id, auto=True, target_session="$3")
+    task_cmd.prime_task(item_id, auto=True)
 
     cmd = [c for c in calls if "spawn-window" in c][0]
     assert "--no-refocus" in cmd and "--auto" not in cmd
     assert cmd[cmd.index("--placement") + 1] == "first"
     assert "--prime-draft" not in cmd, "a planned task is read, not drafted"
     assert cmd[cmd.index("--cwd") + 1] == str(wt)
-    assert cmd[cmd.index("--target-session") + 1] == "$3"
+    assert "--target-session" not in cmd
     assert cmd[cmd.index("--spawned-by") + 1] == "prime"
     assert rendered["primed"] is True and rendered["drafting"] is False
     assert _status(item_id) == "submitted", "priming never moves status"

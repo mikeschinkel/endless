@@ -25,6 +25,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
+	"github.com/mikeschinkel/endless/internal/tmuxservers"
 )
 
 // sessionIDSentinelPrefix marks a payload `process` field that already
@@ -164,7 +165,7 @@ func sessionIDFromSentinel(db dbQuerier, process string) (int64, bool, error) {
 func noLiveSessionForProcess(process string, err error) error {
 	return refusal.NoReport(
 		fmt.Sprintf("events: no live session for process %q: %s", process, err),
-		"Run this from the live session's own pane, or pass --session-id, and retry",
+		"Run this from the live session's own pane, or pass --session N, and retry",
 	).Cause(err)
 }
 
@@ -174,23 +175,31 @@ func noLiveSessionForProcess(process string, err error) error {
 // sqlite connection while the first is still locked.
 //
 // Resolves the pane through `processes` rather than matching a bare string, so
-// the answer is scoped to the tmux server this process is talking to (E-1898),
-// under its id or any alias of it (E-2428).
+// the answer is scoped to one tmux server (E-1898), under its id or any alias
+// of it (E-2428). That server is Endless's task-session server, where every
+// session Endless opens runs and where list-live scopes pane ids (E-2519), and
+// the pane is matched only when the caller is in it (E-2644): a pane id is
+// unique only per server, so a console caller's `%5` names an unrelated task
+// pane, and a session on the caller's own server is not one Endless opened.
+// Outside it the caller matches nothing, as a caller outside tmux does.
+//
+// Never the ambient server's identity: that read stamps @server_uuid on
+// whichever server the caller is in, the user's default one included.
 // The server lookup shells out to tmux, not to the database, so it is safe
 // inside the caller's open transaction.
 func liveSessionByProcessTx(db dbQuerier, process string) (int64, error) {
-	if process == "" {
+	if process == "" || !tmuxservers.InTasksServer() {
 		return 0, sql.ErrNoRows
 	}
-	serverUUID, err := monitor.TmuxServerUUID()
-	if err != nil || serverUUID == "" {
+	serverUUID := monitor.TasksServerUUID()
+	if serverUUID == "" {
 		// No identifiable server: match nothing. Falling back to a bare pane
 		// comparison here would reintroduce exactly the cross-server confusion
 		// this resolution exists to prevent.
 		return 0, sql.ErrNoRows
 	}
 	var id int64
-	err = db.QueryRow(
+	err := db.QueryRow(
 		`SELECT s.id FROM sessions s
 		 JOIN processes p ON p.id = s.process_id
 		 WHERE p.kind_id = ?1 AND `+monitor.SameTmuxServerSQL("p.server_uuid", "?2")+`

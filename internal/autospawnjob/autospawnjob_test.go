@@ -10,13 +10,16 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mikeschinkel/go-cfgstore"
 	_ "modernc.org/sqlite"
 
 	"github.com/mikeschinkel/endless/internal/jobs"
 	"github.com/mikeschinkel/endless/internal/schema"
+	"github.com/mikeschinkel/endless/internal/settings"
 	"github.com/mikeschinkel/endless/internal/spawnlaunchcmd"
+	"github.com/mikeschinkel/endless/internal/tmuxservers"
 )
 
 // init wires cfgstore's package-global logger, which it panics without; the
@@ -331,77 +334,85 @@ func TestLoadProjectPolicy_DefaultsAndOptIn(t *testing.T) {
 	}
 }
 
-// TestResolveTarget covers the three target outcomes and the misconfiguration.
-func TestResolveTarget(t *testing.T) {
-	prev, prevRunning := tmuxOutput, tasksRunning
-	t.Cleanup(func() { tmuxOutput, tasksRunning = prev, prevRunning })
-	tasksRunning = func() bool { return true }
+// TestResolveSession_AsksTheTasksServer: the attached-terminal check before an
+// auto-spawn asks the task-session server, by its socket, whether a terminal
+// is attached to its tasks session, never the runner's own server (E-2644). A
+// client attached to the console says nothing about whether a window opened on
+// the task-session server will be seen.
+func TestResolveSession_AsksTheTasksServer(t *testing.T) {
+	prevServer, prevAttached := tasksServer, attached
+	t.Cleanup(func() { tasksServer, attached = prevServer, prevAttached })
+	srv := tmuxservers.Server{Role: tmuxservers.RoleTasks, Socket: "/tmp/endless-test/endless-tasks", Session: "tasks"}
+	tasksServer = func() (tmuxservers.Server, bool) { return srv, true }
 
-	tmuxOutput = func(args ...string) (string, error) {
-		return "1700000100 $2\n1700000900 $5\n1700000500 $2", nil
-	}
-	target, skip, err := resolveTarget("active")
-	if err != nil || skip != "" || target != "$5" {
-		t.Errorf("active: target=%q skip=%q err=%v, want $5 (latest activity)", target, skip, err)
-	}
-	if target, _, _ = resolveTarget(""); target != "$5" {
-		t.Errorf("unset target: %q, want the active default", target)
-	}
-
-	tmuxOutput = func(args ...string) (string, error) { return "", nil }
-	_, skip, err = resolveTarget("active")
-	if err != nil || !strings.HasPrefix(skip, "no tmux client is attached") {
-		t.Errorf("no client: skip=%q err=%v", skip, err)
-	}
-	tmuxOutput = func(args ...string) (string, error) { return "", errors.New("no server running") }
-	_, skip, _ = resolveTarget("active")
-	if !strings.HasPrefix(skip, "no tmux client is attached") {
-		t.Errorf("no server: skip=%q, want the no-client skip, not a failure", skip)
-	}
-
-	t.Setenv("TMUX_PANE", "%9")
-	target, skip, err = resolveTarget("monitor")
-	if err != nil || skip != "" || target != "" {
-		t.Errorf("monitor in a pane: target=%q skip=%q err=%v, want spawn-window to resolve it", target, skip, err)
-	}
-	t.Setenv("TMUX_PANE", "")
-	_, skip, _ = resolveTarget("monitor")
-	if !strings.Contains(skip, "not in a tmux pane") {
-		t.Errorf("monitor outside a pane: skip=%q", skip)
-	}
-
-	if _, _, err = resolveTarget("elsewhere"); err == nil {
-		t.Error("an unknown target must be a failure, not a silent skip")
-	}
-}
-
-// TestResolveTargetSkipsWhileEndlessIsNotRunning: with the task-session server
-// down every target skips with the spawn's own refusal, so nothing is spawned
-// anywhere else (E-2385); a misconfigured target is still a failure.
-func TestResolveTargetSkipsWhileEndlessIsNotRunning(t *testing.T) {
-	prev, prevRunning := tmuxOutput, tasksRunning
-	t.Cleanup(func() { tmuxOutput, tasksRunning = prev, prevRunning })
-	tasksRunning = func() bool { return false }
-	tmuxOutput = func(args ...string) (string, error) { return "1700000900 $5", nil }
-	t.Setenv("TMUX_PANE", "%9")
-
-	for _, setting := range []string{"", "active", "monitor"} {
-		target, skip, err := resolveTarget(setting)
-		if err != nil || target != "" || skip != spawnlaunchcmd.NotRunningMessage {
-			t.Errorf("%q: target=%q skip=%q err=%v, want the not-running skip", setting, target, skip, err)
+	var asked []string
+	for _, tc := range []struct {
+		attached          bool
+		wantSess, wantWhy string
+	}{
+		{true, "tasks", ""},
+		{false, "", NoClientMessage},
+	} {
+		asked = nil
+		attached = func(s tmuxservers.Server) bool {
+			asked = append(asked, s.Socket)
+			return tc.attached
+		}
+		session, skip := resolveSession()
+		if session != tc.wantSess || skip != tc.wantWhy {
+			t.Errorf("attached=%v: session=%q skip=%q, want %q/%q", tc.attached, session, skip, tc.wantSess, tc.wantWhy)
+		}
+		if !reflect.DeepEqual(asked, []string{srv.Socket}) {
+			t.Errorf("attached=%v: asked %q, want only the task-session socket %q", tc.attached, asked, srv.Socket)
 		}
 	}
-	if _, _, err := resolveTarget("elsewhere"); err == nil {
-		t.Error("an unknown target must still be a failure")
+}
+
+// TestResolveSession_SkipsWhileEndlessIsNotRunning: with the task-session
+// server down the run skips with the spawn's own refusal, so nothing is
+// spawned anywhere else (E-2385), and no server is asked about clients.
+func TestResolveSession_SkipsWhileEndlessIsNotRunning(t *testing.T) {
+	prevServer, prevAttached := tasksServer, attached
+	t.Cleanup(func() { tasksServer, attached = prevServer, prevAttached })
+	tasksServer = func() (tmuxservers.Server, bool) { return tmuxservers.Server{}, false }
+	attached = func(tmuxservers.Server) bool {
+		t.Error("a client check ran with the task-session server down")
+		return true
+	}
+	session, skip := resolveSession()
+	if session != "" || skip != spawnlaunchcmd.NotRunningMessage {
+		t.Errorf("session=%q skip=%q, want the not-running skip", session, skip)
 	}
 }
 
+// TestSpawnArgs: no session is named; spawn-window opens every window in the
+// task-session server's tasks session.
 func TestSpawnArgs(t *testing.T) {
-	if got, want := spawnArgs(42, "$5", "last"), []string{"--no-session", "task", "spawn", "E-42", "--auto", "--to-last", "--target-session", "$5"}; !reflect.DeepEqual(got, want) {
-		t.Errorf("with target: %q, want %q", got, want)
+	if got, want := spawnArgs(42, "last"), []string{"--no-session", "task", "spawn", "E-42", "--auto", "--to-last"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("spawnArgs = %q, want %q", got, want)
 	}
-	if got, want := spawnArgs(42, "", "right"), []string{"--no-session", "task", "spawn", "E-42", "--auto", "--to-right"}; !reflect.DeepEqual(got, want) {
-		t.Errorf("monitor target: %q, want %q", got, want)
+}
+
+// TestTargetSettingIsGone: auto_spawn.target is no longer a registered key,
+// and a user config that still names it loads unchanged.
+func TestTargetSettingIsGone(t *testing.T) {
+	if _, ok, _ := settings.Lookup("auto_spawn.target"); ok {
+		t.Error("auto_spawn.target is still registered")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	dir := filepath.Join(home, ".config", "endless")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.json"),
+		[]byte(`{"auto_spawn":{"interval":"7m","target":"monitor","placement":"right"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := loadSettings()
+	if s.interval != 7*time.Minute || s.placement != "right" {
+		t.Errorf("loadSettings = %+v, want 7m and right from a config naming target", s)
 	}
 }
 

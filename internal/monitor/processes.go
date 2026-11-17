@@ -178,7 +178,16 @@ func ProcessIDsForPanes(panes []string) ([]int64, error) {
 		return nil, nil
 	}
 	uuid, err := TmuxServerUUID()
-	if err != nil || uuid == "" {
+	if err != nil {
+		return nil, nil
+	}
+	return processIDsForPanesOn(uuid, panes)
+}
+
+// processIDsForPanesOn is ProcessIDsForPanes on the server whose identity is
+// uuid; empty, never an error, when uuid is "".
+func processIDsForPanesOn(uuid string, panes []string) ([]int64, error) {
+	if len(panes) == 0 || uuid == "" {
 		return nil, nil
 	}
 	db, err := DB()

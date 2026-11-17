@@ -35,7 +35,6 @@ func runSpawnWindow(args []string) {
 		windowName = fs.String("window-name", "", "tmux window name")
 		cwd        = fs.String("cwd", "", "Working directory for the window")
 		auto       = fs.Bool("auto", false, "Auto-spawned (E-1814): open detached and mark the window @endless_auto_spawned")
-		targetSess = fs.String("target-session", "", "tmux session id to open the window in, instead of the spawner's own")
 		tmuxSess   = fs.String("tmux-session", "", "tmux session NAME to open the window in; refused if it does not exist")
 		placement  = fs.String("placement", string(PlaceFirst), "Where the window's tab lands: first, last, left or right (of the session's active window)")
 		noRefocus  = fs.Bool("no-refocus", false, "Open the window without making it the session's current window")
@@ -55,11 +54,6 @@ func runSpawnWindow(args []string) {
 	if *claudeBin == "" {
 		missingFlag("--claude-bin")
 	}
-	if *targetSess != "" && *tmuxSess != "" {
-		refusal.NoReport("spawn-window: --target-session and --tmux-session both name the session",
-			"Pass one of them and retry").
-			Command("spawn-window").Exit(2)
-	}
 	place, err := ParsePlacement(*placement)
 	if err != nil {
 		refusal.NoReport(fmt.Sprintf("spawn-window: --%v", err),
@@ -73,9 +67,9 @@ func runSpawnWindow(args []string) {
 	// Every spawn's window opens on Endless's task-session server — task spawn,
 	// task claim's window and auto-spawn alike (E-2240) — and only there
 	// (E-2385): with that server down the spawn is refused, never sent to
-	// whichever tmux server the caller is in. An auto-spawn's --target-session
-	// is a session id on whichever server the job runs beside, so it is
-	// dropped; --tmux-session names a session on the task-session server.
+	// whichever tmux server the caller is in. --tmux-session names a session
+	// on the task-session server; without it the window opens in its tasks
+	// session.
 	tasks, running := tmuxservers.RunningTasks()
 	if !running {
 		refusal.Report(NotRunningMessage,
@@ -83,7 +77,6 @@ func runSpawnWindow(args []string) {
 			Command("spawn-window").Exit(1)
 	}
 	tmuxSocket = tasks.Socket
-	*targetSess = ""
 	if *tmuxSess == "" {
 		*tmuxSess = tasks.Session
 	}
@@ -123,12 +116,8 @@ func runSpawnWindow(args []string) {
 
 	// Resolve the landing session BEFORE the window is asked for, so a spawn
 	// that cannot say where it belongs fails without having created anything.
-	//
-	// --target-session names it outright by id. The auto-spawn job passes one
-	// because it runs in a monitor's tmux session, and a window landing there —
-	// out of sight — is the failure E-1815 designed the target setting against.
 	// --tmux-session names it by the name a person sees (E-2234).
-	target, err := resolveTarget(*targetSess, *tmuxSess, place)
+	target, err := resolveTarget(*tmuxSess, place)
 	if err != nil {
 		_ = os.Remove(specPath)
 		// spawnerSession classified its own failures (see tmux_driver.go); Text
@@ -176,15 +165,13 @@ func runSpawnWindow(args []string) {
 // task-session server is not running. The Python gates print the same words.
 const NotRunningMessage = "Endless isn't running. Run `endless start`, then retry."
 
-// resolveTarget is where new-window puts the window: the session named by id
-// or by name when one is given, else the spawner's own (E-2125), and the
-// position within it the placement asks for (E-2234).
-func resolveTarget(sessionID, sessionName string, place Placement) (wp windowPlacement, err error) {
+// resolveTarget is where new-window puts the window: the session named when one
+// is given, else the spawner's own (E-2125), and the position within it the
+// placement asks for (E-2234).
+func resolveTarget(sessionName string, place Placement) (wp windowPlacement, err error) {
 	var sid, active string
 
 	switch {
-	case sessionID != "":
-		sid = sessionID
 	case sessionName != "":
 		sid, err = namedSession(sessionName)
 	default:

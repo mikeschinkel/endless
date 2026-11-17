@@ -127,7 +127,7 @@ def _resolve_process(session_id_override: int | None) -> str:
     `f"__session_id={N}"`, which the Go side recognizes as "skip the
     tmux-pane lookup, use this id directly." Two ways an id becomes known:
 
-    1. An explicit `--session-id N` override (test fixtures, non-tmux
+    1. An explicit `--session N` override (test fixtures, non-tmux
        callers).
     2. The unified `_current_endless_session_id()` resolver, which covers
        the CLAUDECODE-env tier and the E-1585 `@endless_session_uuid`

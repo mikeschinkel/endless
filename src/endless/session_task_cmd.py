@@ -94,7 +94,7 @@ def emit_membership(kind: str, task_refs: tuple[str, ...],
 
     process = _resolve_process(session_id_override)
     _project_id, project_name = _resolve_project(None)
-    # An explicit --session-id also names the actor, so attribution is settled
+    # An explicit --session N also names the actor, so attribution is settled
     # without the resolver (lets a non-tmux caller / test fixture emit). When
     # absent, emit_event resolves actor.session_id the same way _resolve_process
     # resolved the sentinel.

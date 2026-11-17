@@ -304,6 +304,20 @@ func SetTestTmuxObservation(serverUUID string, panes map[string]string) (restore
 	return setTestTmux(serverUUID, panes, serverUUID != "")
 }
 
+// SetTestCallerOutsideTasksServer puts the test's caller in a pane of the
+// server named ambient while the task-session server stays the one pinned by
+// SetTestTmuxServer — a command typed in the console server (E-2644). Call it
+// after SetTestTmuxServer; restore before that one's restore.
+func SetTestCallerOutsideTasksServer(ambient string) (restore func()) {
+	prevUUID := tmuxServerUUIDFn
+	tmuxServerUUIDFn = func() (string, error) { return ambient, nil }
+	restoreIn := tmuxservers.SetTestInTasksServer(false)
+	return func() {
+		restoreIn()
+		tmuxServerUUIDFn = prevUUID
+	}
+}
+
 func setTestTmux(serverUUID string, panes map[string]string, reachable bool) (restore func()) {
 	prevObserve, prevUUID, prevOnce := observeServers, tmuxServerUUIDFn, livenessOnce
 	prevTasksUUID := tasksServerUUIDFn
@@ -338,12 +352,16 @@ func setTestTmux(serverUUID string, panes map[string]string, reachable bool) (re
 		}
 		return []observedServer{srv}
 	}
+	// The test's caller is in that one server's pane, unless there is none
+	// (E-2644): a pane id names a task-session pane only from inside it.
+	restoreIn := tmuxservers.SetTestInTasksServer(serverUUID != "")
 	// A pinned observation is a NEW observation; drop the once-guard so the next
 	// read re-observes rather than reusing whatever a prior test left behind.
 	livenessOnce = &sync.Once{}
 	livenessErr = nil
 
 	return func() {
+		restoreIn()
 		observeServers, tmuxServerUUIDFn, livenessOnce = prevObserve, prevUUID, prevOnce
 		tasksServerUUIDFn = prevTasksUUID
 		tmuxSocketPathFn, probeSocket, endlessServerDown = prevSocket, prevProbe, prevDown

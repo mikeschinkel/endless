@@ -58,7 +58,7 @@ def _relation(task_id, session_id=SESSION_ID):
 
 def _run(*args):
     return CliRunner().invoke(
-        main, list(args) + ["--session-id", str(SESSION_ID)]
+        main, list(args) + ["--session", str(SESSION_ID)]
     )
 
 
@@ -410,3 +410,20 @@ def test_remove_is_no_longer_a_subcommand():
     result = _run("session", "task", "remove", "E-500")
     assert result.exit_code != 0
     assert "No such command" in result.output
+
+
+# --- the override's spelling (E-2644) ---------------------------------------
+
+
+@pytest.mark.parametrize("argv", [
+    ["session", "touch"], ["touch"], ["session", "snapshot", "add"],
+    ["session", "task", "add"], ["session", "task", "delete"],
+])
+def test_session_override_is_spelled_session_n(argv):
+    """The four event-emitting commands take the override as `--session N`,
+    as `errors accept`/`decline` do; `--session-id` is gone from them."""
+    help_text = CliRunner().invoke(main, argv + ["--help"]).output
+    assert "--session N" in help_text
+    assert "--session-id" not in help_text
+    res = CliRunner().invoke(main, argv + ["--session-id", "5"])
+    assert res.exit_code == 2 and "No such option" in res.output

@@ -202,23 +202,11 @@ func TestNewWindowArgs_DetachedOnlyWhenAsked(t *testing.T) {
 	}
 }
 
-// TestResolveTarget_ExplicitSessionWins: --target-session names the session
-// outright, needs no $TMUX_PANE, and is rendered as a window in that session.
-func TestResolveTarget_ExplicitSessionWins(t *testing.T) {
+// TestResolveTarget_SpawnersOwnNeedsAPane: with no session named the window is
+// the spawner's, which refuses without a pane rather than guessing (E-2125).
+func TestResolveTarget_SpawnersOwnNeedsAPane(t *testing.T) {
 	t.Setenv("TMUX_PANE", "")
-	want := windowPlacement{"-b", "$7:{start}"}
-	for _, in := range []string{"$7", "$7:"} {
-		got, err := resolveTarget(in, "", PlaceFirst)
-		if err != nil {
-			t.Fatalf("resolveTarget(%q): %v", in, err)
-		}
-		if got != want {
-			t.Errorf("resolveTarget(%q) = %v, want %v", in, got, want)
-		}
-	}
-	// With no explicit session it is still the spawner's, which refuses
-	// without a pane rather than guessing (E-2125).
-	if _, err := resolveTarget("", "", PlaceFirst); err == nil {
+	if _, err := resolveTarget("", PlaceFirst); err == nil {
 		t.Error("resolveTarget(\"\") with no $TMUX_PANE: want an error")
 	}
 }

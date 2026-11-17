@@ -8115,7 +8115,6 @@ def spawn_plan(item_id: int, project_name: str | None = None,
                worktree: str | None = None, force: bool = False,
                permission_mode: str = "auto", model: str | None = None,
                name: str | None = None, auto: bool = False,
-               target_session: str | None = None,
                no_refocus: bool = False, placement: str = "first",
                tmux_session: str | None = None, out_of_order: bool = False,
                allow_open_questions: bool = False):
@@ -8145,11 +8144,10 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     well — and it still does so for one release while warning. What replaces it
     is reopening the task explicitly; the refusal below names that route.
 
-    `auto` and `target_session` are the auto-spawn job's (E-1814), never a
-    person's. `auto` opens the window detached, so it does not take the user's
-    focus, and marks it so SessionStart flags the session auto-spawned.
-    `target_session` names the tmux session the window opens in; without it the
-    window lands in the spawner's own session (E-2125).
+    `auto` is the auto-spawn job's (E-1814), never a person's. It opens the
+    window detached, so it does not take the user's focus, and marks it so
+    SessionStart flags the session auto-spawned. The window opens in the
+    task-session server's tasks session, as every spawn's does (E-2385).
 
     `no_refocus`, `placement` and `tmux_session` are a person's (E-2234).
     `no_refocus` opens the window detached, as `auto` does, without marking it.
@@ -8388,8 +8386,6 @@ def spawn_plan(item_id: int, project_name: str | None = None,
         spawn_cmd += ["--auto"]
     if no_refocus:
         spawn_cmd += ["--no-refocus"]
-    if target_session:
-        spawn_cmd += ["--target-session", target_session]
     if tmux_session is not None:
         spawn_cmd += ["--tmux-session", tmux_session]
     subprocess.run(spawn_cmd, check=True)
@@ -8456,7 +8452,6 @@ _PRIMEABLE_STATUSES: frozenset[str] = frozenset(
 
 def prime_task(item_id: int, permission_mode: str = "auto",
                model: str | None = None, auto: bool = False,
-               target_session: str | None = None,
                placement: str = "first", out_of_order: bool = False) -> None:
     """Start a session that reads a task in now and waits for its user (E-1994).
 
@@ -8473,7 +8468,7 @@ def prime_task(item_id: int, permission_mode: str = "auto",
         nobody is meant to look yet. `placement` is where its tab lands, as for
         `task spawn`; the prime job passes auto_spawn's setting.
 
-    Reached from the `prime` job (`--auto`, `--target-session`) when a plan is
+    Reached from the `prime` job (`--auto`) when a plan is
     attached, and from a person following claim's or spawn's no-plan refusal.
     """
     import shutil
@@ -8572,8 +8567,6 @@ def prime_task(item_id: int, permission_mode: str = "auto",
         spawn_cmd += ["--prime-draft"]
     if model:
         spawn_cmd += ["--model", model]
-    if target_session:
-        spawn_cmd += ["--target-session", target_session]
     subprocess.run(spawn_cmd, check=True)
 
     click.echo(f"Priming a session on {tid}{' (drafting its plan)' if drafting else ''}:")

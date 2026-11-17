@@ -2341,10 +2341,10 @@ def session_snapshot_cmd():
 @session_snapshot_cmd.command("add")
 @click.argument("input_file", required=False,
                 type=click.Path(exists=True, dir_okay=False))
-@click.option("--session-id", "session_id_override", type=int, default=None,
-              help="Use this Endless session id directly instead of "
-                   "resolving the current session (test fixtures / "
-                   "non-tmux callers).")
+@click.option("--session", "session_id_override", type=int, default=None,
+              metavar="N",
+              help="Record it for session ES-N instead of the session "
+                   "running this.")
 def session_snapshot_add(input_file, session_id_override):
     """Record a session status snapshot from XML on stdin or a file path.
 
@@ -2410,9 +2410,8 @@ def session_task_cmd():
 
 
 _SESSION_ID_OPTION = click.option(
-    "--session-id", "session_id_override", type=int, default=None,
-    help="Use this Endless session id directly instead of resolving the "
-         "current session (test fixtures / non-tmux callers).",
+    "--session", "session_id_override", type=int, default=None, metavar="N",
+    help="Act on session ES-N's list instead of the session running this.",
 )
 
 
@@ -4263,12 +4262,10 @@ def task_handoff(item_id):
 @click.option("--bg", is_flag=True, hidden=True)
 @click.option("--attach", is_flag=True, hidden=True)
 @click.option("--new-session", is_flag=True, hidden=True)
-# E-1814: the auto-spawn job's own flags, hidden because a person never passes
-# them. --auto opens the window detached and marks it auto-spawned;
-# --target-session names the tmux session it opens in, which the job resolves
-# because it runs in a monitor's session, not the one the user is looking at.
+# E-1814: the auto-spawn job's own flag, hidden because a person never passes
+# it. --auto opens the window detached and marks it auto-spawned. The window
+# opens in the task-session server's tasks session, as every spawn's does.
 @click.option("--auto", "auto", is_flag=True, hidden=True)
-@click.option("--target-session", "target_session", default=None, hidden=True)
 @click.option("--out-of-order", "out_of_order", is_flag=True,
               help="Start it even though a task that should precede it is "
                    "unfinished. Those tasks are still listed.")
@@ -4277,7 +4274,7 @@ def task_handoff(item_id):
 def task_spawn(item_id, project, permission_mode, model, session_name,
                worktree, no_refocus, to_first, to_last, to_left, to_right,
                tmux_session, force, reopen, print_decision, bg, attach,
-               new_session, auto, target_session, out_of_order,
+               new_session, auto, out_of_order,
                allow_open_questions):
     """Spawn Claude working on a task in a new tmux window.
 
@@ -4322,16 +4319,11 @@ def task_spawn(item_id, project, permission_mode, model, session_name,
             "exclusive; got " + ", ".join(f"--to-{n}" for n in chosen)
             + ". Nothing ran.",
             "Pass at most one --to-* flag and retry", exit_code=2)
-    if tmux_session is not None and target_session:
-        raise agent_help.no_report(
-            "--tmux-session and --target-session both name the session. "
-            "Nothing ran.",
-            "Pass one of them and retry", exit_code=2)
     from endless.task_cmd import spawn_plan
     spawn_plan(item_id, project_name=project,
                worktree=worktree, force=force,
                permission_mode=permission_mode, model=model,
-               name=session_name, auto=auto, target_session=target_session,
+               name=session_name, auto=auto,
                no_refocus=no_refocus,
                placement=chosen[0] if chosen else "first",
                tmux_session=tmux_session, out_of_order=out_of_order,
@@ -4345,16 +4337,14 @@ def task_spawn(item_id, project, permission_mode, model, session_name,
 @click.option("--model", default=None,
               help="claude --model for the primed session (optional).")
 # The prime job's own flags (E-1994), hidden for task spawn's reason: --auto
-# says the job asked rather than a person, and --target-session names the tmux
-# session the window opens in.
+# says the job asked rather than a person.
 @click.option("--auto", "auto", is_flag=True, hidden=True)
-@click.option("--target-session", "target_session", default=None, hidden=True)
 @click.option("--placement", "placement", default="first", hidden=True,
               type=click.Choice(["first", "last", "left", "right"]))
 @click.option("--out-of-order", "out_of_order", is_flag=True,
               help="Start it even though a task that should precede it is "
                    "unfinished. Those tasks are still listed.")
-def task_prime(item_id, permission_mode, model, auto, target_session, placement,
+def task_prime(item_id, permission_mode, model, auto, placement,
                out_of_order):
     """Start a session that reads a task in now and waits for you.
 
@@ -4368,7 +4358,7 @@ def task_prime(item_id, permission_mode, model, auto, target_session, placement,
     """
     from endless.task_cmd import prime_task
     prime_task(item_id, permission_mode=permission_mode, model=model,
-               auto=auto, target_session=target_session, placement=placement,
+               auto=auto, placement=placement,
                out_of_order=out_of_order)
 
 

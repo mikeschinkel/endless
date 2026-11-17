@@ -315,6 +315,50 @@ def test_tmux_run_addresses_the_tasks_server(monkeypatch, here):
     assert ("TMUX" in env) is here
 
 
+@pytest.mark.parametrize("here", [True, False])
+def test_companion_resolvers_send_the_callers_pane_only_from_the_tasks_server(
+        monkeypatch, here):
+    """`_tmux_window_pane_ids`, `_window_claimed_task` and
+    `_live_window_claiming` name the caller's pane with `-t` only when the
+    caller is in the task-session server (E-2644). Pane ids are unique per
+    server (E-2196): from the console, `%3` is a different pane there, so each
+    answers as from outside tmux and never sends it."""
+    import subprocess
+    from endless import tmux_cmd
+    monkeypatch.setattr(tmux_cmd, "tasks_server", lambda: (FAKE_SOCKET, "tasks"))
+    session_cmd._tasks_server_cache.clear()
+    monkeypatch.setenv("TMUX", f"{FAKE_SOCKET if here else '/tmp/other'},1,0")
+    monkeypatch.setenv("TMUX_PANE", "%3")
+    monkeypatch.setattr(session_cmd, "_live_sessions",
+                        lambda **kw: [{"task_id": 7, "pane_id": "%9",
+                                       "endless_session_id": 70}])
+    targets = []
+
+    def fake_run(argv, **kw):
+        if "-t" in argv:
+            targets.append(argv[argv.index("-t") + 1])
+        if "list-panes" in argv:
+            return _Result(0, "%3\n%4\n")
+        if "#{@endless_task_id}" in argv:
+            return _Result(0, "7\n")
+        return _Result(0, "@1 tasks:1 E-7\n")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    panes = session_cmd._tmux_window_pane_ids()
+    claimed = session_cmd._window_claimed_task()
+    other = session_cmd._live_window_claiming(7)
+
+    assert ("%3" in targets) is here
+    if here:
+        assert panes == ["%3", "%4"]
+        assert claimed == 7
+        assert other is None  # %9 is in this very window
+    else:
+        assert panes is None
+        assert claimed is None
+        assert other == ("tasks:1 (E-7)", 70)
+
+
 def test_tmux_run_answers_nothing_while_endless_is_not_running(monkeypatch):
     import subprocess
     from endless import tmux_cmd
@@ -540,6 +584,22 @@ def test_back_empty_stack_no_spawner(goto_env, capsys):
     assert exc.value.code == 1
     assert "no previous session" in capsys.readouterr().err
     assert ft.switched == []
+
+
+def test_back_from_the_console_ignores_its_own_pane(goto_env, capsys):
+    """From the console, the caller's `%cur` is a pane of ANOTHER server: it is
+    never read for a spawner, and goto never pushes it as a token (E-2644)."""
+    stage, make = goto_env
+    stage(endless_session_id=207, pane_id="%207")
+    ft = make({"%207", "%cur"}, spawned_by="207", current_pane="%cur",
+              here=False)
+
+    with pytest.raises(SystemExit):
+        session_cmd.session_back()
+    assert ft.switched == [] and ft.selected == []
+    assert "no previous session" in capsys.readouterr().err
+    assert session_cmd._current_pane_token(
+        [{"pane_id": "%cur", "endless_session_id": 9}]) is None
 
 
 def test_back_drops_stale_token_then_pops_next(goto_env):

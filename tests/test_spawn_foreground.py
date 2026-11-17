@@ -142,22 +142,23 @@ def test_manual_spawn_passes_no_auto_flags(isolated_env, fg_env):
     assert "--target-session" not in cmd
 
 
-def test_auto_spawn_threads_auto_and_target_session(isolated_env, fg_env):
+def test_auto_spawn_threads_auto(isolated_env, fg_env):
     """E-1814: the auto-spawn job's spawn reaches spawn-window as --auto (open
-    detached, mark the window) plus the session it resolved."""
+    detached, mark the window), naming no session: spawn-window opens it in
+    the task-session server's tasks session (E-2644)."""
     _seed_project_and_task(1705)
 
-    spawn_plan(1705, auto=True, target_session="$4")
+    spawn_plan(1705, auto=True)
 
     cmd = [c for c in fg_env if "spawn-window" in c][0]
     assert "--auto" in cmd
-    assert cmd[cmd.index("--target-session") + 1] == "$4"
+    assert "--target-session" not in cmd
     # No session asked for it, so none is named as its spawner — not even the
     # one this process could resolve.
     assert cmd[cmd.index("--spawned-by") + 1] == "auto-spawn"
 
 
-@pytest.mark.parametrize("kwargs", [{}, {"auto": True, "target_session": "$4"},
+@pytest.mark.parametrize("kwargs", [{}, {"auto": True},
                                     {"tmux_session": "work"}])
 def test_spawn_refuses_while_endless_is_not_running(
         isolated_env, fg_env, monkeypatch, kwargs):
@@ -184,7 +185,9 @@ def test_auto_flags_are_hidden():
     from endless.cli import task_spawn
     hidden = {opt for p in task_spawn.params if getattr(p, "hidden", False)
               for opt in p.opts}
-    assert {"--auto", "--target-session"} <= hidden
+    assert "--auto" in hidden
+    assert not [o for p in task_spawn.params for o in p.opts
+                if o == "--target-session"]
 
 
 def test_foreground_spawn_session_named_for_the_task_by_default(isolated_env, fg_env):
@@ -195,7 +198,7 @@ def test_foreground_spawn_session_named_for_the_task_by_default(isolated_env, fg
     through the same default."""
     _seed_project_and_task(1705)
 
-    for kwargs in ({}, {"auto": True, "target_session": "$4"}):
+    for kwargs in ({}, {"auto": True}):
         fg_env.clear()
         spawn_plan(1705, **kwargs)
 

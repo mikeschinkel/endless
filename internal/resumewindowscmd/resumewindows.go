@@ -45,6 +45,8 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/refusal"
+	"github.com/mikeschinkel/endless/internal/spawnlaunchcmd"
+	"github.com/mikeschinkel/endless/internal/tmuxservers"
 )
 
 // Run is the `endless-go resume-windows` entry point.
@@ -107,6 +109,21 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
+	// Every task window is on Endless's task-session server (E-2240), so the
+	// sweep addresses it by socket from wherever it is typed (E-2644). Until
+	// then it reached the server the caller was in, or the default one. With
+	// that server down there are no task windows to resume; only the user
+	// starts it.
+	tasks, running := runningTasks()
+	if !running {
+		emit(stderr, refusal.Report(spawnlaunchcmd.NotRunningMessage,
+			"whether to run `endless start`, which starts Endless's tmux servers; nothing was resumed",
+		).Command("resume-windows"))
+		return 1
+	}
+	socket = tasks.Socket
+	defer func() { socket = "" }()
+
 	windows, err := listWindows()
 	if err != nil {
 		// tmux itself would not answer: no server, or a server this process
@@ -133,7 +150,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	self := os.Getenv("TMUX_PANE")
+	// The caller's own pane names a pane of the swept server only when the
+	// caller is in it; elsewhere its `%5` is an unrelated task pane (E-2196).
+	var self string
+	if inTasksServer() {
+		self = os.Getenv("TMUX_PANE")
+	}
 	var plans []plan
 	for _, w := range windows {
 		plans = append(plans, decide(gather(w, self)))
@@ -395,14 +417,22 @@ func shellQuote(s string) string {
 
 // ── tmux ─────────────────────────────────────────────────────────────────────
 
-// socket is the server Restore addresses; "" for the ambient one.
+// socket is the task-session server run and Restore address; "" only
+// between commands.
 var socket string
+
+// runningTasks and inTasksServer are the seams through which run finds the
+// task-session server and whether the caller is in it, so the sweep is tested
+// without one.
+var (
+	runningTasks  = tmuxservers.RunningTasks
+	inTasksServer = tmuxservers.InTasksServer
+)
 
 // tmuxOut is the one seam through which this package talks to tmux, so the
 // dispatch sequence is tested by recording argv rather than driving a server.
 //
-// socket, when set, puts every command on the server at that path (Restore);
-// unset, they reach the server the caller is in, or the default one.
+// socket puts every command on the server at that path.
 var tmuxOut = func(args ...string) (string, error) {
 	if socket != "" {
 		args = append([]string{"-S", socket}, args...)

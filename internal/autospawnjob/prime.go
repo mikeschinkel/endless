@@ -5,9 +5,9 @@ package autospawnjob
 //
 // A sibling of the auto-spawn job in this package rather than a package of its
 // own, because everything but the selection is the same act: start a Claude
-// session nobody asked for, one per interval, in the tmux session the user is
-// looking at, from the project's own checkout, through the Python CLI. The
-// cadence and target are auto_spawn's (config.Prime says why); the opt-in and
+// session nobody asked for, one per interval, in the task-session server's tasks
+// session, from the project's own checkout, through the Python CLI. The
+// cadence and placement are auto_spawn's (config.Prime says why); the opt-in and
 // the cap are prime's own.
 //
 // # What is eligible
@@ -78,7 +78,7 @@ func (primeJob) Run(ctx context.Context) (err error) {
 	var s userSettings
 	var pick candidate
 	var skip string
-	var target string
+	var session string
 
 	// A sandbox database's project rows point at real checkouts; see job.Run.
 	if monitor.IsSandboxActive() {
@@ -98,8 +98,8 @@ func (primeJob) Run(ctx context.Context) (err error) {
 		goto end
 	}
 
-	target, skip, err = resolveTarget(s.target)
-	if err != nil || skip != "" {
+	session, skip = resolveSession()
+	if skip != "" {
 		jobs.Note(ctx, skip)
 		goto end
 	}
@@ -113,11 +113,11 @@ func (primeJob) Run(ctx context.Context) (err error) {
 		goto end
 	}
 
-	err = runEndless(ctx, pick, primeArgs(pick.taskID, target, s.placement))
+	err = runEndless(ctx, pick, primeArgs(pick.taskID, s.placement))
 	if err != nil {
 		goto end
 	}
-	jobs.Note(ctx, "primed E-"+strconv.FormatInt(pick.taskID, 10)+describeTarget(s.target, target))
+	jobs.Note(ctx, "primed E-"+strconv.FormatInt(pick.taskID, 10)+describeSession(session))
 
 end:
 	return err
@@ -268,13 +268,9 @@ func outstandingPrimed(db *sql.DB, projectID int64) (n int, err error) {
 }
 
 // primeArgs is the `endless` argv for one prime, spawnArgs' counterpart.
-func primeArgs(taskID int64, target, placement string) []string {
-	args := []string{"--no-session", "task", "prime", "E-" + strconv.FormatInt(taskID, 10), "--auto",
+func primeArgs(taskID int64, placement string) []string {
+	return []string{"--no-session", "task", "prime", "E-" + strconv.FormatInt(taskID, 10), "--auto",
 		"--placement", placement}
-	if target != "" {
-		args = append(args, "--target-session", target)
-	}
-	return args
 }
 
 func int64sToArgs(ids []int64) []any {

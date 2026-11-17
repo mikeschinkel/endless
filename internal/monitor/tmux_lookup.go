@@ -353,19 +353,22 @@ func ResolveSessionStatusSession(pane string) (int64, error) {
 // matches any of the given panes, or 0 when none. Companion to anySessionForPanes
 // (which only tests existence); this returns the id the no-goal view anchors on.
 func sessionForPanes(panes []string) (int64, error) {
-	if len(panes) == 0 {
+	ids, err := ProcessIDsForPanes(panes)
+	if err != nil {
+		return 0, err
+	}
+	return sessionForProcessIDs(ids)
+}
+
+// sessionForProcessIDs returns the most-recently-active live session bound to
+// any of ids, or 0 when none is.
+func sessionForProcessIDs(ids []int64) (int64, error) {
+	if len(ids) == 0 {
 		return 0, nil
 	}
 	db, err := DB()
 	if err != nil {
 		return 0, err
-	}
-	ids, err := ProcessIDsForPanes(panes)
-	if err != nil {
-		return 0, err
-	}
-	if len(ids) == 0 {
-		return 0, nil
 	}
 	placeholders, args := processIDArgs(ids)
 	var id int64

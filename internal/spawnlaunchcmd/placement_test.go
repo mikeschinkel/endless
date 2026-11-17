@@ -95,14 +95,14 @@ func TestResolveTarget_NamedSession(t *testing.T) {
 		}
 		return "", errors.New("unexpected")
 	})
-	got, err := resolveTarget("", "work", PlaceRight)
+	got, err := resolveTarget("work", PlaceRight)
 	if err != nil {
 		t.Fatalf("resolveTarget: %v", err)
 	}
 	if want := (windowPlacement{"-a", "@12"}); got != want {
 		t.Errorf("resolveTarget = %v, want %v", got, want)
 	}
-	got, err = resolveTarget("", "work", PlaceLast)
+	got, err = resolveTarget("work", PlaceLast)
 	if err != nil || got != (windowPlacement{"-a", "$5:{end}"}) {
 		t.Errorf("resolveTarget last = %v, %v", got, err)
 	}
@@ -114,7 +114,7 @@ func TestResolveTarget_MissingNamedSessionRefuses(t *testing.T) {
 	calls := stubTmux(t, func(args []string) (string, error) {
 		return "", errors.New("can't find session")
 	})
-	_, err := resolveTarget("", "nope", PlaceFirst)
+	_, err := resolveTarget("nope", PlaceFirst)
 	if err == nil || !strings.Contains(err.Error(), `"nope"`) {
 		t.Fatalf("err = %v, want a refusal naming the session", err)
 	}
@@ -126,20 +126,33 @@ func TestResolveTarget_MissingNamedSessionRefuses(t *testing.T) {
 // TestResolveTarget_OnlyRelativeAsksForActiveWindow: first and last need no
 // active-window query; left and right do.
 func TestResolveTarget_OnlyRelativeAsksForActiveWindow(t *testing.T) {
-	calls := stubTmux(t, func(args []string) (string, error) { return "@1", nil })
+	calls := stubTmux(t, func(args []string) (string, error) {
+		if args[0] == "display-message" && args[len(args)-1] == "#{session_id}" {
+			return "$2", nil
+		}
+		return "@1", nil
+	})
+	asksActive := func() (n int) {
+		for _, c := range *calls {
+			if reflect.DeepEqual(c, activeWindowArgs("$2")) {
+				n++
+			}
+		}
+		return n
+	}
 	for _, p := range []Placement{PlaceFirst, PlaceLast} {
-		if _, err := resolveTarget("$2", "", p); err != nil {
+		if _, err := resolveTarget("work", p); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if len(*calls) != 0 {
-		t.Errorf("first/last queried tmux: %q", *calls)
+	if n := asksActive(); n != 0 {
+		t.Errorf("first/last asked for the active window %d times: %q", n, *calls)
 	}
-	if _, err := resolveTarget("$2", "", PlaceLeft); err != nil {
+	if _, err := resolveTarget("work", PlaceLeft); err != nil {
 		t.Fatal(err)
 	}
-	if len(*calls) != 1 || !reflect.DeepEqual((*calls)[0], activeWindowArgs("$2")) {
-		t.Errorf("left calls = %q", *calls)
+	if n := asksActive(); n != 1 {
+		t.Errorf("left asked for the active window %d times: %q", n, *calls)
 	}
 }
 
@@ -194,7 +207,7 @@ func TestPlacement_LiveTmux(t *testing.T) {
 		{PlaceLeft, "LEFT", "FIRST LEFT A* RIGHT C LAST"},
 	}
 	for _, st := range steps {
-		wp, err := resolveTarget("", "probe", st.place)
+		wp, err := resolveTarget("probe", st.place)
 		if err != nil {
 			t.Fatalf("%s: resolveTarget: %v", st.place, err)
 		}
@@ -207,7 +220,7 @@ func TestPlacement_LiveTmux(t *testing.T) {
 	}
 
 	// Without -d the new window takes focus — the plain manual spawn.
-	wp, err := resolveTarget("", "probe", PlaceFirst)
+	wp, err := resolveTarget("probe", PlaceFirst)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +230,7 @@ func TestPlacement_LiveTmux(t *testing.T) {
 	}
 
 	// A prefix of a real session's name is not that session.
-	if _, err = resolveTarget("", "prob", PlaceFirst); err == nil {
+	if _, err = resolveTarget("prob", PlaceFirst); err == nil {
 		t.Error(`--tmux-session "prob" resolved against session "probe"; want a refusal`)
 	}
 }

@@ -79,7 +79,7 @@ type EndlessConfig struct {
 
 	// Prime configures the prime job (E-1994): starting a task's session ahead
 	// of need when a plan is attached. Project-only, for AutoSpawn.Enabled's
-	// reason. Its cadence, tmux target and placement are AutoSpawn's: both jobs
+	// reason. Its cadence and placement are AutoSpawn's: both jobs
 	// start sessions nobody asked for, and the user's one setting governs both.
 	Prime Prime `json:"prime,omitzero"`
 
@@ -219,7 +219,7 @@ type ListColor struct {
 // is the failure the per-project switch exists to prevent. Read them with
 // LoadProject.
 //
-// Interval, Target and Placement are CLI-ONLY: there is one auto-spawn job for
+// Interval and Placement are CLI-ONLY: there is one auto-spawn job for
 // the whole database, so a per-project cadence has nothing to attach to. Read
 // them with Load("").
 type AutoSpawn struct {
@@ -235,12 +235,8 @@ type AutoSpawn struct {
 	// DefaultAutoSpawnInterval. At most one task is spawned per interval.
 	Interval string `json:"interval,omitempty"`
 
-	// Target names the tmux session a spawned window opens in: "active" (the
-	// session of the most recently active attached client) or "monitor" (the
-	// session the job runs in). Empty means "active".
-	Target string `json:"target,omitempty"`
-
-	// Placement is where a spawned window's tab lands in the target session
+	// Placement is where a spawned window's tab lands in the task-session
+	// server's tasks session, where every spawned window opens
 	// (E-2234): "first", "last", "left" or "right", the last two relative to
 	// that session's active window. Empty means DefaultAutoSpawnPlacement.
 	Placement string `json:"placement,omitempty"`
@@ -258,11 +254,6 @@ const (
 	// existing one, out of the way of the windows the user arranged. A manual
 	// `task spawn` defaults to first instead, because its user asked for it.
 	DefaultAutoSpawnPlacement = "last"
-
-	// AutoSpawnTargetActive and AutoSpawnTargetMonitor are the two Target
-	// values.
-	AutoSpawnTargetActive  = "active"
-	AutoSpawnTargetMonitor = "monitor"
 )
 
 // Tmux is the "tmux" object: where Endless's own tmux servers live and how a

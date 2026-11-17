@@ -103,8 +103,15 @@ func TestBuild_ValuesAndSources(t *testing.T) {
 	if !e.Suggestable || e.Rationale == "" || e.Kind != "optin" || e.Files != "project" {
 		t.Errorf("main_sync.enabled metadata = %+v", e)
 	}
-	if c := entry(t, exp, "auto_spawn.target").Choices; len(c) != 2 {
-		t.Errorf("auto_spawn.target choices = %v", c)
+	if c := entry(t, exp, "auto_spawn.placement").Choices; len(c) != 4 {
+		t.Errorf("auto_spawn.placement choices = %v", c)
+	}
+	// E-2644: every window opens in the task-session server's tasks session,
+	// so there is no target left to choose.
+	for _, e := range exp.Settings {
+		if e.ID == "auto_spawn.target" {
+			t.Error("settings list still shows auto_spawn.target")
+		}
 	}
 }
 

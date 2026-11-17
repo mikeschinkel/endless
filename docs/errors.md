@@ -217,8 +217,8 @@ Each new error goes one of four ways, decided by who raised it (above):
 Starting sessions is throttled: **one outstanding at a time**, machine-wide. No
 session is resumed or spawned while a resumed one has not answered or a spawned
 fix task has not reached `unverified`. Messages are not throttled. A session is
-started only while a tmux client is attached, into the tmux session and tab
-position that `auto_spawn.target` and `auto_spawn.placement` name.
+started only while a terminal is attached to the task-session server's `tasks`
+session, where it opens, at the tab position `auto_spawn.placement` names.
 
 ```sh
 endless errors accept 12                      # this session takes error 12

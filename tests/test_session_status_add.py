@@ -285,7 +285,7 @@ def test_filed_attribute_preserved_in_serialization():
 # --- Process resolution (E-1588) ------------------------------------------
 
 def test_resolve_process_explicit_override():
-    # An explicit --session-id produces the sentinel directly, regardless
+    # An explicit --session N produces the sentinel directly, regardless
     # of env / resolver.
     assert _resolve_process(42) == "__session_id=42"
 

@@ -379,3 +379,56 @@ func TestDefaultLauncher(t *testing.T) {
 		}
 	}
 }
+
+// TestInTasksServer_FalseOutsideTmux: with $TMUX unset no pane is the
+// caller's, on any server, and no server is asked (E-2644).
+func TestInTasksServer_FalseOutsideTmux(t *testing.T) {
+	t.Setenv("TMUX", "")
+	if InTasksServer() {
+		t.Error("InTasksServer() with $TMUX unset = true")
+	}
+}
+
+// TestInTasksServer_Seam: the test seam pins the answer and restores it.
+func TestInTasksServer_Seam(t *testing.T) {
+	t.Setenv("TMUX", "")
+	restore := SetTestInTasksServer(true)
+	if !InTasksServer() {
+		t.Error("pinned true, got false")
+	}
+	restore()
+	if InTasksServer() {
+		t.Error("after restore, got the pinned true")
+	}
+}
+
+// TestSameSocket compares files when both exist, so a symlinked socket
+// directory still matches, and paths otherwise.
+func TestSameSocket(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "endless-tasks")
+	if err := os.WriteFile(real, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "via-link")
+	if err := os.Symlink(dir, link); err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(dir, "endless-console")
+	if err := os.WriteFile(other, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		a, b string
+		want bool
+	}{
+		{real, filepath.Join(link, "endless-tasks"), true},
+		{real, other, false},
+		{"/nowhere/a/../tasks", "/nowhere/tasks", true},
+		{"/nowhere/tasks", "/nowhere/console", false},
+	} {
+		if got := sameSocket(tc.a, tc.b); got != tc.want {
+			t.Errorf("sameSocket(%q, %q) = %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+}

@@ -1,0 +1,48 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2644 and records what was true when E-2644
+# landed. Edit it only if you ARE E-2644. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+schema = 1
+task   = "E-2644"
+
+[[check]]
+name   = "Go: in-tasks-server check, event pane resolution, auto-spawn/triage client check, spawn-window, resume-windows, settings"
+runner = "gotest"
+paths  = ["./internal/tmuxservers/...", "./internal/events/...", "./internal/monitor/...",
+          "./internal/autospawnjob/...", "./internal/triagejob/...", "./internal/spawnlaunchcmd/...",
+          "./internal/resumewindowscmd/...", "./internal/config/...", "./internal/settingscmd/..."]
+
+[[check]]
+name   = "Python: companion resolvers and back, --session N on the four commands, spawn and prime without --target-session"
+runner = "pytest/uv"
+paths  = ["tests/test_session_goto_back.py", "tests/test_session_task_membership.py",
+          "tests/test_session_status_add.py", "tests/test_spawn_foreground.py", "tests/test_prime.py"]
+
+[[check]]
+name     = "session touch --help offers --session N"
+sh       = "uv run endless session touch --help"
+contains = "--session N"
+
+[[check]]
+name         = "session touch --help no longer offers --session-id"
+sh           = "uv run endless session touch --help"
+not_contains = "--session-id"
+
+[[check]]
+name         = "settings list no longer shows auto_spawn.target"
+sh           = "./bin/endless-go settings list 2>&1"
+not_contains = "auto_spawn.target"
+
+[[check]]
+name   = "spawn-window no longer takes --target-session"
+sh     = "./bin/endless-go spawn-window --target-session x 2>&1; test $? -ne 0"
+
+[[check]]
+name   = "the guide's auto-spawn section no longer mentions auto_spawn.target"
+sh     = "grep -c 'auto_spawn.target' docs/guide/reference.md"
+equals = "0"
+
+[[check]]
+name     = "the guide names the task-session server's tasks session as where the window opens"
+sh       = "grep -c 'in the `tasks` session of Endless.s task-session server' docs/guide/reference.md"
+equals   = "1"

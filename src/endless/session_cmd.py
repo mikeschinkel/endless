@@ -1155,13 +1155,14 @@ def _window_claimed_task() -> int | None:
     `$TMUX_PANE`, a failed query, the option unset (tmux prints an empty line
     for one), or a value that is not a task id. A window carrying no claim is
     the ordinary case `session resume` is run from — a plain recovery shell —
-    and must not be gated.
+    and must not be gated. A caller outside the task-session server has no
+    window there, so it carries no claim either (E-2644).
 
     Read through `display-message`, the same way `_spawner_pane` reads
     `@endless_spawned_by`: `show-options -w` needs the option to exist to print
     anything useful, while a format string renders an unset option as empty.
     """
-    pane = os.environ.get("TMUX_PANE", "")
+    pane = _own_tasks_pane()
     if not pane:
         return None
     res = _tmux_run(
@@ -1225,7 +1226,7 @@ def _live_window_claiming(task_id: int) -> tuple[str, int] | None:
         live = _live_sessions(all_projects=True)
     except Exception:
         return None
-    here = _tmux_window_of(os.environ.get("TMUX_PANE", ""))
+    here = _tmux_window_of(_own_tasks_pane() or "")
     here_id = here[0] if here else None
     for row in live:
         raw = row.get("task_id")
@@ -2672,7 +2673,7 @@ def _project_root_for_cwd() -> Path:
 
 def _tmux_window_pane_ids() -> list[str] | None:
     """Return pane ids in the tmux window containing TMUX_PANE, or None
-    if not in tmux / TMUX_PANE unset.
+    if not in a pane of the task-session server (E-2644).
 
     MUST scope with -t $TMUX_PANE. A bare `tmux list-panes` resolves
     against tmux's *currently active* pane in the user's client, not
@@ -2682,9 +2683,7 @@ def _tmux_window_pane_ids() -> list[str] | None:
     misattributed claim/bind/emit_event session resolution to siblings
     in unrelated windows.
     """
-    if not os.environ.get("TMUX"):
-        return None
-    pane = os.environ.get("TMUX_PANE")
+    pane = _own_tasks_pane()
     if not pane:
         return None
     result = _tmux_run(["list-panes", "-t", pane, "-F", "#{pane_id}"])
@@ -3375,6 +3374,21 @@ def _in_tasks_server() -> bool:
     return tasks is not None and tmux_cmd.in_server(tasks[0])
 
 
+def _own_tasks_pane() -> str | None:
+    """This process's `$TMUX_PANE` when it runs in a pane of the task-session
+    server, else None — as if outside tmux.
+
+    `_tmux_run` addresses that server, and a pane id is unique only per server
+    (E-2196): typed from the console, the caller's `%5` names an unrelated task
+    pane there. Every lookup that sends the caller's own pane as `-t` takes it
+    from here (E-2644).
+    """
+    pane = os.environ.get("TMUX_PANE")
+    if pane and _in_tasks_server():
+        return pane
+    return None
+
+
 def _tmux_run(args: list[str], timeout: float = 2.0):
     """Run a tmux command on Endless's task-session server; return the
     CompletedProcess, or None on failure or while that server is not running.
@@ -3441,8 +3455,8 @@ def _spawner_session_target() -> str | None:
     tasks = _tasks_server()
     if tasks is None:
         return None
-    pane = os.environ.get("TMUX_PANE")
-    if pane and _in_tasks_server():
+    pane = _own_tasks_pane()
+    if pane:
         res = _tmux_run(["display-message", "-p", "-t", pane, "#{session_id}"])
         if res and res.returncode == 0 and res.stdout.strip():
             return f"{res.stdout.strip()}:"
@@ -3557,9 +3571,10 @@ def _backstack_pop(key: str) -> str | None:
 
 def _current_pane_token(live: list[dict]) -> str | None:
     """Token for the current pane to push onto the stack: its endless session id
-    if the pane is a tracked session, else the raw pane id. None if no pane.
+    if the pane is a tracked session, else the raw pane id. None if no pane on
+    the task-session server, where the stack's panes live (E-2644).
     """
-    pane = os.environ.get("TMUX_PANE", "")
+    pane = _own_tasks_pane()
     if not pane:
         return None
     for c in live:
@@ -3704,10 +3719,15 @@ def _resolve_goto_target(ref: str, live: list[dict]) -> tuple[str, str]:
 def _spawner_pane(live: list[dict]) -> tuple[str, str] | None:
     """Resolve this window's `@endless_spawned_by` to the spawner's current live
     pane, for `back`'s empty-stack fallback. Returns (pane, label) or None.
+
+    None outside a pane of the task-session server (E-2644): there is no
+    window there to have been spawned, and without `-t` tmux would read the
+    option off whichever pane its current client shows.
     """
-    pane = os.environ.get("TMUX_PANE", "")
-    target = ["-t", pane] if pane else []
-    res = _tmux_run(["display-message", "-p", *target, "#{@endless_spawned_by}"])
+    pane = _own_tasks_pane()
+    if not pane:
+        return None
+    res = _tmux_run(["display-message", "-p", "-t", pane, "#{@endless_spawned_by}"])
     if not res or res.returncode != 0:
         return None
     val = res.stdout.strip()

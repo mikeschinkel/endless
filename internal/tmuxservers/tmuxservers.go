@@ -168,6 +168,55 @@ func RunningTasks() (Server, bool) {
 	return s.Tasks, true
 }
 
+// inTasksServerFn is the seam SetTestInTasksServer swaps so a test decides
+// whether its caller is in the task-session server without a real one.
+// Production always uses liveInTasksServer.
+var inTasksServerFn = liveInTasksServer
+
+// InTasksServer reports whether this process runs in a pane of Endless's
+// task-session server: the socket path in $TMUX is that server's socket. False
+// with $TMUX unset or the server not running.
+//
+// A pane id is unique only per server (E-2196), so a caller's $TMUX_PANE names
+// a task-session pane only when this is true; from the console server, its
+// `%5` is an unrelated pane there (E-2644). The Go twin of Python's
+// `tmux_cmd.in_server(tasks_server()[0])`.
+func InTasksServer() bool {
+	return inTasksServerFn()
+}
+
+// SetTestInTasksServer pins InTasksServer's answer until restore is called.
+// Exported because cross-package tests (internal/monitor's tmux pinning, and
+// through it internal/events) cannot reach a _test.go helper.
+func SetTestInTasksServer(in bool) (restore func()) {
+	prev := inTasksServerFn
+	inTasksServerFn = func() bool { return in }
+	return func() { inTasksServerFn = prev }
+}
+
+func liveInTasksServer() bool {
+	here, _, _ := strings.Cut(os.Getenv("TMUX"), ",")
+	if here == "" {
+		return false
+	}
+	tasks, ok := RunningTasks()
+	if !ok {
+		return false
+	}
+	return sameSocket(here, tasks.Socket)
+}
+
+// sameSocket reports whether two socket paths name one file, falling back to
+// comparing the cleaned paths when either cannot be read.
+func sameSocket(a, b string) bool {
+	ai, aerr := os.Stat(a)
+	bi, berr := os.Stat(b)
+	if aerr != nil || berr != nil {
+		return filepath.Clean(a) == filepath.Clean(b)
+	}
+	return os.SameFile(ai, bi)
+}
+
 // SocketDir is the configured socket directory, or the default when the config
 // cannot be read. For observation (liveness), which must never fail over a
 // config file; commands that START or ADDRESS a server use Resolve.

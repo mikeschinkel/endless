@@ -162,8 +162,8 @@ func TestLoadPrimePolicy_DefaultsAndOptIn(t *testing.T) {
 }
 
 func TestPrimeArgs(t *testing.T) {
-	if got, want := primeArgs(42, "$5", "last"), []string{"--no-session", "task", "prime", "E-42", "--auto", "--placement", "last", "--target-session", "$5"}; !reflect.DeepEqual(got, want) {
-		t.Errorf("with target: %q, want %q", got, want)
+	if got, want := primeArgs(42, "last"), []string{"--no-session", "task", "prime", "E-42", "--auto", "--placement", "last"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("primeArgs = %q, want %q", got, want)
 	}
 }
 

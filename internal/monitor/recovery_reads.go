@@ -19,11 +19,19 @@ func IsShellCommand(cmd string) bool {
 }
 
 // LiveSessionForPanes returns the most-recently-active live session bound to
-// any of panes on the tmux server this process reaches, or 0 when none is.
-// Server-scoped through ProcessIDsForPanes, so a session bound to the same
-// "%N" on a server that died in a crash never matches a restored pane.
+// any of panes on Endless's task-session server, or 0 when none is.
+//
+// Server-scoped, so a session bound to the same "%N" on a server that died in
+// a crash never matches a restored pane. Scoped to the task-session server, not
+// the one this process is in (E-2644): resume-windows lists its panes there by
+// socket, and from the console the ambient identity would find no session on
+// any of them and type a resume over a running Claude.
 func LiveSessionForPanes(panes []string) (int64, error) {
-	return sessionForPanes(panes)
+	ids, err := processIDsForPanesOn(TasksServerUUID(), panes)
+	if err != nil {
+		return 0, err
+	}
+	return sessionForProcessIDs(ids)
 }
 
 // TaskProjectPath returns the resolved root of the project taskID belongs to,

@@ -13,7 +13,6 @@ const (
 	EnabledSetting   settings.ID = "auto_spawn.enabled"
 	CapSetting       settings.ID = "auto_spawn.cap"
 	IntervalSetting  settings.ID = "auto_spawn.interval"
-	TargetSetting    settings.ID = "auto_spawn.target"
 	PlacementSetting settings.ID = "auto_spawn.placement"
 
 	PrimeEnabledSetting settings.ID = "prime.enabled"
@@ -55,13 +54,6 @@ func (AutoSpawn) Settings() []settings.Setting {
 		Files:   settings.MachineFile,
 		Kind:    settings.DurationKind,
 		Default: config.DefaultAutoSpawnInterval,
-	}, {
-		ID:      TargetSetting,
-		Feature: "auto_spawn",
-		Files:   settings.MachineFile,
-		Kind:    settings.ChoiceKind,
-		Choices: []string{config.AutoSpawnTargetActive, config.AutoSpawnTargetMonitor},
-		Default: config.AutoSpawnTargetActive,
 	}, {
 		ID:      PlacementSetting,
 		Feature: "auto_spawn",

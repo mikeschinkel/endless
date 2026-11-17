@@ -48,7 +48,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -108,7 +107,7 @@ func (job) Run(ctx context.Context) (err error) {
 	var s userSettings
 	var pick candidate
 	var skip string
-	var target string
+	var session string
 
 	// A sandbox database is a copy of main whose projects rows point at REAL
 	// checkouts. Spawning from it would create real worktrees and real Claude
@@ -130,25 +129,25 @@ func (job) Run(ctx context.Context) (err error) {
 		goto end
 	}
 
-	target, skip, err = resolveTarget(s.target)
-	if err != nil || skip != "" {
+	session, skip = resolveSession()
+	if skip != "" {
 		jobs.Note(ctx, skip)
 		goto end
 	}
 
 	// A typo here is a configuration error, failed rather than quietly
-	// defaulted, for the same reason an unknown target is: so it is seen.
+	// defaulted, so it is seen.
 	_, err = spawnlaunchcmd.ParsePlacement(s.placement)
 	if err != nil {
 		err = fmt.Errorf("auto_spawn.%w", err)
 		goto end
 	}
 
-	err = runEndless(ctx, pick, spawnArgs(pick.taskID, target, s.placement))
+	err = runEndless(ctx, pick, spawnArgs(pick.taskID, s.placement))
 	if err != nil {
 		goto end
 	}
-	jobs.Note(ctx, "spawned E-"+strconv.FormatInt(pick.taskID, 10)+describeTarget(s.target, target))
+	jobs.Note(ctx, "spawned E-"+strconv.FormatInt(pick.taskID, 10)+describeSession(session))
 
 end:
 	return err
@@ -157,12 +156,11 @@ end:
 // userSettings is the user-level half of the config: one job, one cadence.
 type userSettings struct {
 	interval  time.Duration
-	target    string
 	placement string
 }
 
-// loadSettings reads auto_spawn.interval, auto_spawn.target and
-// auto_spawn.placement from the user's config (the CLI layer). A missing, unreadable or unparsable interval falls
+// loadSettings reads auto_spawn.interval and auto_spawn.placement from the
+// user's config (the CLI layer). A missing, unreadable or unparsable interval falls
 // back to the default rather than failing: Schedule has no error return, and a
 // typo in a preference must not stop the runner from scheduling anything.
 func loadSettings() (s userSettings) {
@@ -170,7 +168,6 @@ func loadSettings() (s userSettings) {
 	var err error
 
 	s.interval, _ = time.ParseDuration(config.DefaultAutoSpawnInterval)
-	s.target = config.AutoSpawnTargetActive
 	s.placement = config.DefaultAutoSpawnPlacement
 
 	cfg, err = config.Load("")
@@ -179,9 +176,6 @@ func loadSettings() (s userSettings) {
 	}
 	if d, perr := time.ParseDuration(cfg.AutoSpawn.Interval); perr == nil && d > 0 {
 		s.interval = d
-	}
-	if cfg.AutoSpawn.Target != "" {
-		s.target = cfg.AutoSpawn.Target
 	}
 	if cfg.AutoSpawn.Placement != "" {
 		s.placement = cfg.AutoSpawn.Placement
@@ -428,96 +422,49 @@ func placeholders(n int) string {
 	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
 }
 
-// tmuxOutput runs one tmux command and returns its trimmed stdout. A package
-// var so target resolution can be tested without a tmux server.
-var tmuxOutput = func(args ...string) (string, error) {
-	out, err := exec.Command("tmux", args...).Output()
-	return strings.TrimSpace(string(out)), err
-}
+// tasksServer is the seam target resolution reads the task-session server
+// through, so it is tested without one.
+var tasksServer = tmuxservers.RunningTasks
 
-// tasksRunning reports whether Endless's task-session server is running. A
-// package var so target resolution can be tested without one.
-var tasksRunning = func() bool {
-	_, ok := tmuxservers.RunningTasks()
-	return ok
-}
+// attached is the seam through which the attached-terminal check asks the
+// task-session server, so a test records which server was asked.
+var attached = func(srv tmuxservers.Server) bool { return srv.Attached() }
 
-// resolveTarget turns the auto_spawn.target setting into the session id the
-// window opens in, or a reason to skip this run.
+// NoClientMessage is the note of a run that skipped because nobody would see
+// the window.
+const NoClientMessage = "no tmux client is attached; auto-spawn waits until one is"
+
+// resolveSession returns the tmux session a window opened unasked lands in —
+// the task-session server's tasks session, where spawn-window opens every
+// window (E-2240, E-2385) — or a reason to skip this run.
 //
-// With Endless's task-session server down there is nowhere for the window to
-// go — a spawn opens only there (E-2385) — so the run skips, saying so in its
-// note, and spawns nothing. It does not start the server: only `endless start`
-// does.
+// With that server down there is nowhere for the window to go, so the run
+// skips, saying so in its note, and spawns nothing. It does not start the
+// server: only `endless start` does.
 //
-//   - active: the session of the most recently active ATTACHED client — where
-//     the user is. No attached client means nobody is looking, and a spawn now
-//     would land in a session no one will see, so the run skips and says so.
-//     Auto-spawn therefore pauses by itself while the user is fully detached.
-//   - monitor: the session the runner itself is in, which spawn-window already
-//     resolves from $TMUX_PANE; target is left empty. Without a pane there is
-//     no such session, and the run skips.
-//
-// Any other value is a configuration error, reported as a failure so it is
-// seen rather than silently ignored.
-func resolveTarget(setting string) (target, skip string, err error) {
-	switch setting {
-	case "", config.AutoSpawnTargetActive:
-		target = mostRecentlyActiveClientSession()
-		if target == "" {
-			skip = "no tmux client is attached; auto-spawn waits until one is"
-		}
-	case config.AutoSpawnTargetMonitor:
-		if os.Getenv("TMUX_PANE") == "" {
-			skip = "auto_spawn.target is monitor, but the runner is not in a tmux pane"
-		}
-	default:
-		err = fmt.Errorf("auto_spawn.target %q is not one of %q or %q",
-			setting, config.AutoSpawnTargetActive, config.AutoSpawnTargetMonitor)
+// With no terminal attached to that session nobody would see the window, and
+// a session would start and spend tokens unwatched, so the run skips and says
+// so; auto-spawn pauses by itself while the user is detached (E-1815). The
+// check asks the task-session server by its socket, never the runner's own
+// server (E-2644): the runner may be in the console server, where a client
+// attached there says nothing about whether the tasks session is on screen.
+func resolveSession() (session, skip string) {
+	srv, ok := tasksServer()
+	if !ok {
+		return "", spawnlaunchcmd.NotRunningMessage
 	}
-	// After the setting is validated, so a misconfiguration is still seen.
-	if err == nil && !tasksRunning() {
-		target, skip = "", spawnlaunchcmd.NotRunningMessage
+	if !attached(srv) {
+		return "", NoClientMessage
 	}
-	return target, skip, err
+	return srv.Session, ""
 }
 
-// mostRecentlyActiveClientSession asks tmux for every attached client and
-// returns the session id of the one with the latest activity, or "" when there
-// is no server or no client. list-clients lists attached clients only, so a
-// detached session never qualifies.
-func mostRecentlyActiveClientSession() (session string) {
-	var latest int64 = -1
-
-	out, err := tmuxOutput("list-clients", "-F", "#{client_activity} #{session_id}")
-	if err != nil {
+// describeSession renders where the window went, for the run's note.
+func describeSession(session string) string {
+	if session == "" {
 		return ""
 	}
-	for _, line := range strings.Split(out, "\n") {
-		activity, id, ok := strings.Cut(strings.TrimSpace(line), " ")
-		if !ok || id == "" {
-			continue
-		}
-		n, perr := strconv.ParseInt(activity, 10, 64)
-		if perr != nil {
-			continue
-		}
-		if n > latest {
-			latest, session = n, id
-		}
-	}
-	return session
-}
-
-// describeTarget renders where the window went, for the run's note.
-func describeTarget(setting, target string) string {
-	if target != "" {
-		return " into tmux session " + target
-	}
-	if setting == config.AutoSpawnTargetMonitor {
-		return " into the monitor's tmux session"
-	}
-	return ""
+	return " into tmux session " + session
 }
 
 // runEndless shells one `endless` command for pick — the auto-spawn job's
@@ -611,23 +558,22 @@ func verbOf(args []string) (verb string) {
 	return strings.Join(words, " ")
 }
 
-// Window is where a session nobody asked for opens: auto_spawn.target resolved
-// to a tmux session, and auto_spawn.placement. Shared with the fault-triage
-// job, which starts sessions under the same user setting (E-2272).
+// Window is where a session nobody asked for opens: the task-session server's
+// tasks session, and auto_spawn.placement. Shared with the fault-triage job,
+// which starts sessions under the same user setting (E-2272).
 type Window struct {
-	Target    string // tmux session id; "" for the runner's own (target monitor)
+	Session   string // the tasks session's name, for a note
 	Placement string
-	Setting   string // the auto_spawn.target value it came from, for a note
 }
 
-// ResolveWindow resolves the user's auto_spawn target and placement, or returns
-// the reason to skip starting a session now — chiefly that no tmux client is
-// attached, so nobody would see it.
+// ResolveWindow resolves where a window opened unasked lands, or returns the
+// reason to skip starting a session now — chiefly that no tmux client is
+// attached to the task-session server, so nobody would see it.
 func ResolveWindow() (w Window, skip string, err error) {
 	s := loadSettings()
-	w.Setting, w.Placement = s.target, s.placement
-	w.Target, skip, err = resolveTarget(s.target)
-	if err != nil || skip != "" {
+	w.Placement = s.placement
+	w.Session, skip = resolveSession()
+	if skip != "" {
 		goto end
 	}
 	_, err = spawnlaunchcmd.ParsePlacement(s.placement)
@@ -641,12 +587,12 @@ end:
 
 // SpawnArgs is the `endless` argv that auto-spawns taskID into w.
 func SpawnArgs(taskID int64, w Window) []string {
-	return spawnArgs(taskID, w.Target, w.Placement)
+	return spawnArgs(taskID, w.Placement)
 }
 
 // Describe renders where w opens, for a run's note.
 func (w Window) Describe() string {
-	return describeTarget(w.Setting, w.Target)
+	return describeSession(w.Session)
 }
 
 // spawnArgs is the `endless` argv for one auto-spawn.
@@ -660,13 +606,12 @@ func (w Window) Describe() string {
 //
 // placement is always passed (E-2234): `task spawn` defaults to first, which is
 // right for a person who asked for the window and wrong for one nobody did.
-func spawnArgs(taskID int64, target, placement string) []string {
-	args := []string{"--no-session", "task", "spawn", "E-" + strconv.FormatInt(taskID, 10), "--auto",
+//
+// No session is named: spawn-window opens every window in the task-session
+// server's tasks session (E-2385).
+func spawnArgs(taskID int64, placement string) []string {
+	return []string{"--no-session", "task", "spawn", "E-" + strconv.FormatInt(taskID, 10), "--auto",
 		"--to-" + placement}
-	if target != "" {
-		args = append(args, "--target-session", target)
-	}
-	return args
 }
 
 // tailLimit bounds how much subprocess output rides along in a fault.
