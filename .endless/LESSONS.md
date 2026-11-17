@@ -8137,3 +8137,7 @@ In the E-2632 brainstorm I noted that Endless's post-land guide defines post-lan
 ### [2026-11-15] Hear the user's proposal before building on it
 In the E-2632 brainstorm Mike suggested using hooks for recurring post-land steps (install). I read it as a hook that does the work, and argued against it ('Endless can't see what a hook will do'). He meant a script that prints the commands to run on stdout: dynamic config. He had to correct me twice. When the user's suggestion is vague or new, restate what I think they mean and check it before arguing for or against it.
 - **Project**: endless
+
+### [2026-11-16] Frame choices in plain terms; no coined labels like 'policy' or 'premise vs hypothesis'
+While presenting the open questions for E-2572 (which tmux server each endless command runs on), I framed Q1 as 'premise or hypothesis' and called the deliverable 'the policy'. Mike could not follow either: 'I really do not understand the distinction of your options' and 'What "policy" are you going on about?'. The reason: a label I coin in one message is undefined for the reader, and a question built on two undefined labels has no options a reader can weigh. Say the concrete thing instead: 'should every command run only on the named tasks or console server, or should some commands be allowed on the caller's server?'. This matches the needs-plan rule to use only defined terms.
+- **Project**: endless
