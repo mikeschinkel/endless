@@ -1,0 +1,1 @@
+Found while planning E-2572. autospawnjob.mostRecentlyActiveClientSession runs bare tmux list-clients on whichever server the job runner is in; triagejob.startAllowed uses the same ResolveWindow. The --target-session they compute is then dropped by spawn-window, which always opens on the task-session server.
