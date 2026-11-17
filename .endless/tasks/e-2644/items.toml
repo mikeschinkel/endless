@@ -77,3 +77,8 @@ statement = "session back's spawner fallback and back-stack token use the caller
 id = "P14"
 kind = "deliverable"
 statement = "resume-windows judges whether a pane already holds a live session by the task-session server's identity, so a sweep typed from the console never types a resume over a running Claude"
+
+[[item]]
+id = "P15"
+kind = "deliverable"
+statement = "task spawn and task prime drop their hidden --target-session flag, which only the auto-spawn and prime jobs passed through to spawn-window"
