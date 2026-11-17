@@ -62,3 +62,8 @@ statement = "Does not touch the other sites in E-2572's analysis that use the ca
 id = "P11"
 kind = "exclusion"
 statement = "Does not change which server or session a spawn, resume or auto-spawn window opens in"
+
+[[item]]
+id = "P12"
+kind = "exclusion"
+statement = "Does not rename the --session-id flags of endless-go subcommands (event emit, session-query, report-*, correct), which no user types"
