@@ -1,0 +1,1 @@
+Found while planning E-2572. session_cmd.py's --tmux-session path calls endless-go resume-windows; resumewindowscmd.tmuxOut runs with socket "" there, so it reaches the ambient or default server. Only tmuxstartcmd.restore passes tasks.Socket.
