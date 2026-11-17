@@ -39,8 +39,7 @@ sh     = "./bin/endless-go spawn-window --target-session x 2>&1; test $? -ne 0"
 
 [[check]]
 name   = "the guide's auto-spawn section no longer mentions auto_spawn.target"
-sh     = "grep -c 'auto_spawn.target' docs/guide/reference.md"
-equals = "0"
+sh     = "! grep -q 'auto_spawn.target' docs/guide/reference.md"
 
 [[check]]
 name     = "the guide names the task-session server's tasks session as where the window opens"
