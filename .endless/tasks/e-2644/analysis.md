@@ -25,7 +25,10 @@ the named console server; anything else is a bug.
 - `--session N` is the documented spelling of the session override on the
   four event-emitting commands; "less to type, and what other value would
   'session' vs 'session-id' imply?" `errors accept` and `errors decline`
-  already spell it `--session N`.
+  already spell it `--session N`. `--session-id` is removed from the four, not
+  kept as an alias (Mike: "Remove it, and have the plan search and fix any
+  breakage"). The Go subcommands' `--session-id` flags are not user-typed and
+  stay.
 - The pane fallback in event resolution stays, scoped to the task-session
   server. It is the third tier after `--session` and the resolver; dropping
   it would refuse a Claude in an endless-tasks pane whose other two tiers both
