@@ -1,0 +1,1 @@
+Mike, planning E-2572: he has been meaning to ask for the console's status line to differ from the task-session server's. E-2572's answer to its Q1 has every command that tmux runs inside an Endless server receive its server's socket on a command line Endless generates per server, which gives each server its own status-line command line.
