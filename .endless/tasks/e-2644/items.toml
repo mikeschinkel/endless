@@ -16,7 +16,7 @@ verify = "internal/events/session_status_test.go"
 [[item]]
 id = "P3"
 kind = "deliverable"
-statement = "session touch, session snapshot add, session task add and session task delete document the override as --session N; --session-id is still accepted"
+statement = "session touch, session snapshot add, session task add and session task delete take the override as --session N only; --session-id is removed from them and every caller and test that passed it to one of them is updated, with a repo-wide search showing none left"
 verify = "endless session touch --help"
 
 [[item]]
