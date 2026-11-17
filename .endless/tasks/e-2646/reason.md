@@ -1,0 +1,1 @@
+Merged into E-2644 per ED-1550: one cause, pane and client lookups still taken from the caller's tmux server after E-2519 moved the data model to the task-session server.
