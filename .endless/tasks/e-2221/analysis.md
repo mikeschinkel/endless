@@ -1,12 +1,35 @@
-## The open design question, which is the whole cost
+## Why the mark changes basis
 
-"Duplicated" judged by display means answering "which live boards currently show this task", and board membership is computed rather than stored: the focal task plus its epic children, dependents, blockers and frames. Ownership needs one indexed query over `session_tasks`; display membership needs every live session's board evaluated, or membership materialised somewhere it can be read back.
+Today ◫ (`DuplicateWork`, internal/monitor/session_stewardship.go) comes from
+who filed, updated or focused a task, read from `session_tasks` in one query.
+A task that is on a board as a dependent, blocker or child has no such row, so
+a task listed on two boards went unmarked (E-2519 on tasks:9 and tasks:10,
+2026-10-31). Mike designed ◫ to mean "listed in another session", which needs
+other boards' rows, and that is the new cost.
 
-`session status` repaints every two seconds, and the ◆/~ column is the precedent for what the render path may pay for: the expensive half is computed by a background job and READ by the display, never computed by it (E-1758, and the unlanded-verdict cache under `.git/info/`).
+## Why build other boards only while drawing
 
-Settle before implementing:
+Mike: before E-2229 gated monitors on window visibility, monitors maxed the CPU
+at 15–20 sessions; with it, 70+ sessions run with minimal CPU. A background job
+building every board on a timer would reintroduce always-on work. A monitor
+recording what it drew fails because a hidden monitor draws nothing.
 
-- **What counts as a duplicate?** "Shown on two live boards", or "shown on two live boards for a reason that implies work"? A blocker listed on five boards is co-appearance by construction, and marking all of it produces noise rather than signal — the opposite of what the marker is for.
-- **Are board frames in scope?** An epic parent frame appears on the board of every one of its children by construction. Marking all of those says little; answering "no" leaves the reported symptom (E-1486, an epic) unfixed. That tension is the heart of this task.
-- **Where is it computed?** If per-repaint evaluation of every live board is too expensive, this needs the cached-verdict shape rather than a wider query on the render path.
-- **Does the existing vocabulary still fit?** `DuplicateWork` and `OwnedElsewhere` currently split on ownership. If duplication becomes a display property, decide whether they remain two fields, and what `OwnedElsewhere` means for a row nobody owns.
+## Why planning, not focus, suppresses
+
+Focus moves on any write, and sessions routinely add notes and links to other
+sessions' tasks. Suppressing on focus would take a task off its steward's board
+after a note. Mike chose (Q6) to key suppression on E-2533's planning marker.
+He kept focus and stewardship separate, wary of unintended consequences of
+tying them.
+
+## Why only unspawned tasks
+
+Mike: "I won't be spawning any already spawned/underway (or later)" tasks; a
+held task already says where it is worked.
+
+## Glyph for the filing task
+
+✚ reads as "created", is unused in Endless, and renders at normal width. ⊞ was
+rejected: it resembles ⊕ ⊗ ⊘ ⊖, which already mean other things. Mike chose
+glyphs over words: words help a new user but are slower to scan, and users
+become experienced with the monitor quickly.
