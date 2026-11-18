@@ -8149,3 +8149,7 @@ Mike, planning E-2572: earlier task-sessions were asked to standardize Endless o
 ### [2026-11-16] Verify where a thing runs before stating it as fact
 Planning E-2644, I wrote that the auto-spawn job runs on the console 'where monitors run'. Mike: 'This is not true, or at least I do not think it is. session monitors run on endless-tasks, project monitors run on endless-console.' The code agrees with him: jobs.RunDue is driven by both the session-status loop (task-session server) and the project-status loop (console), plus 'endless jobs run' from any shell, so the job runner can be on either server. The reason this matters: a design question built on a wrong premise cannot be answered, and Mike had to spend his turn correcting the premise instead of choosing. Before writing 'X runs on Y' or 'X is where Z happens', read the call site or run it; if unverified, say so in the sentence.
 - **Project**: endless
+
+### [2026-11-18] E-2572's plan over-specified a research task
+While working E-2572 (decide which tmux server each endless command may run on), I executed the attached plan as binding: exhaustive inventory, a tmux stand-in, and an epic with one task per mechanism. Mike said Claude over-specified this research task, and asked for a new plan reconsidered from the task's Title, Justification and Analysis, treating the existing plan as non-authoritative and evaluating it very critically. Reason: the plan had replaced the question the task exists to decide with an audit of a pre-decided answer.
+- **Project**: endless
