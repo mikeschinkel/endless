@@ -34,7 +34,7 @@ The workable rule: **`$TMUX` may answer "am I in a pane of an Endless server, an
 
 Proposed ED-1673 wording:
 
-> Endless's tmux work happens only on the two servers it starts, endless-tasks and endless-console, each addressed by the socket path from the tmux settings. A command may compare $TMUX with those sockets to learn whether it is running in a pane of one of them, and must not otherwise use the caller's server. Endless never changes the user's own tmux servers. Commands can be typed anywhere; a command refuses only when the server it needs is not running or when it must replace a pane on endless-tasks.
+> Endless's tmux work happens only on the two servers it starts, endless-tasks and endless-console, each addressed by the socket path from the tmux settings. A command may compare $TMUX with those sockets to learn whether it is running in a pane of one of them, and must not otherwise use the caller's server. Endless never changes the user's own tmux servers. Commands can be typed anywhere; a command refuses only when the server it needs is not running or when it must replace a pane on endless-tasks. tmux is the multiplexer Endless integrates with today, not a permanent requirement: Endless expects to support other multiplexers through an abstracted integration, and this rule then applies to whichever servers Endless starts.
 
 ## Claude hooks
 
@@ -46,18 +46,32 @@ Proposed ED-1673 wording:
 
 The console block is your planning answer, and the evidence supports keeping it: no headless `claude -p` child depends on a hook. `run_internal_claude` sets `ENDLESS_NO_HOOKS`, and the triage sender passes `disableAllHooks`.
 
-**What this costs.** A Claude in the user's own tmux loses the liveness it has today, and gets what a plain-terminal Claude already gets:
-- **A second session in the same worktree:** still kept out by the worktree lock (`worktreeLockHeldByLiveOther`).
-- **Resuming a running session:** still refused, because the process listing finds it (`_running_session`).
-- **A crash:** the session keeps reading as present, so `task claim` refuses that task until a new session binds in its worktree, which ends the stale row (`TestBindSessionToTask_EndsStalePanelessRowsSameTask`).
+**What this costs.** Endless learns that a session is gone in one of two ways: Claude's SessionEnd hook reports it, or the session's recorded pane has disappeared. A crash skips the hook, so only the pane can show it. Under this rule, a Claude in the user's own tmux has no recorded pane, the same as a plain-terminal Claude today. It reads `unbound`, and Endless counts `unbound` as still present because it cannot prove the session is gone.
 
-I'd accept that cost. Binding by OS process would remove it, and `processes` already has a `pid` kind, but nothing writes that kind today and no reported problem calls for it yet.
+While that Claude is running, nothing is lost:
+- **A second session in the same worktree:** the worktree lock still keeps it out (`worktreeLockHeldByLiveOther`).
+- **Resuming a running session:** still refused, because the process listing finds it (`_running_session`).
+
+After it crashes and its pane closes, the two cases differ like this:
+
+| After the crash | Session with a recorded pane | Session with no recorded pane (`unbound`) |
+|---|---|---|
+| `session status`, `worktree` guards | reads `dead` | stays present until someone ends it |
+| `task claim` or `task spawn` on its task | refused, and names `session goto E-N --resume` | refused, says the task is "already active" in pane `?`, and names `session goto E-N`, which then points to `--resume` |
+| A fresh `claude` started in its worktree | not bound; told to use `session goto E-N --resume` | same |
+| Worktree reaper and `worktree drop` | may remove the worktree | treat the worktree as in use |
+
+The task is not stranded. A task continues only from the session that held it (E-2418), so the refusal itself is the same with or without a pane. `session goto E-N --resume` reopens the crashed session in a new window on `endless-tasks`. `session end ES-N` clears the stale session, after 10 minutes without activity or sooner with `--force`.
+
+The real costs are a session that looks present after it has gone, a misleading refusal, and a worktree that stays protected until someone ends the session. A recorded pane has a limit too: if the pane stays open after Claude crashes, that session keeps reading `live`, because liveness checks the pane and not Claude.
+
+I'd accept that cost. The misleading refusal is worth fixing in the follow-up task. Binding by OS process would remove the rest, and `processes` already has a `pid` kind, but nothing writes that kind today and no reported problem calls for it yet.
 
 ## PRODUCT
 
 - **Someone who does not use tmux:** every no-tmux command works, and Claude is tracked as `unbound`. Spawning and `goto` need `endless start`, and they say so.
 - **Someone who uses tmux for their own work:** Endless never changes their servers. Claude works there unbound.
-- **Another multiplexer later:** the rule is stated in terms of Endless's own servers, so it carries over, in line with your E-2302 note that tmux is an enabling technology and not the foundation.
+- **Someone who uses another multiplexer:** tmux is not a permanent requirement for Endless. This policy describes today's tmux integration, and Endless expects to support other multiplexers by abstracting its integration points. The rule carries over: Endless acts only on the servers it starts, addresses them explicitly, and leaves the user's own alone.
 
 ## Entry points checked
 
@@ -91,7 +105,7 @@ Per ED-1550, these fold findings into open tasks, file one cause, and close what
 
 | Action | Task | Why |
 |---|---|---|
-| **File one task** | new: put every tmux call behind the rule above | Departures 1–4 share one cause, the ambient server. It includes the hook gate and the `--socket` command lines E-2652 builds on |
+| **File one task** | new: put every tmux call behind the rule above | Departures 1–4 share one cause, the ambient server. It includes the hook gate, the `--socket` command lines E-2652 builds on, and the refusal for an `unbound` holder. Routing the calls through one place also gives a later multiplexer abstraction its starting point |
 | Fold evidence | E-2333 (unverified) | Its private `socket_dir` is too long on macOS and silently falls back to the real directory |
 | Fold evidence | E-2356 | Give it the Go test breakout, or merge it with E-2333 |
 | Close | E-2302 | This research answers it |
