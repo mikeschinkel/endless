@@ -8153,3 +8153,7 @@ Planning E-2644, I wrote that the auto-spawn job runs on the console 'where moni
 ### [2026-11-18] E-2572's plan over-specified a research task
 While working E-2572 (decide which tmux server each endless command may run on), I executed the attached plan as binding: exhaustive inventory, a tmux stand-in, and an epic with one task per mechanism. Mike said Claude over-specified this research task, and asked for a new plan reconsidered from the task's Title, Justification and Analysis, treating the existing plan as non-authoritative and evaluating it very critically. Reason: the plan had replaced the question the task exists to decide with an audit of a pre-decided answer.
 - **Project**: endless
+
+### [2026-11-18] E-2572: hold task filing until the research is complete
+On E-2572 I found tests reaching the live tmux servers and recommended filing a bugfix immediately, while the research was still open. Mike said to wait until the research is complete before filing any tasks, and to consider ED-1550 when deciding what to file.
+- **Project**: endless
