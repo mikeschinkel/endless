@@ -2,10 +2,9 @@
 
 ## Order
 
-Start this after the task that writes each server's socket into the tmux
-command lines Endless generates for that server. E-2572's research recommends
-that task but has not filed it; link it here as `blocked_by` when it exists.
-E-2391 supplies the project code and precedes this task.
+E-2657 writes each server's socket into the tmux command lines Endless
+generates for that server, and blocks this task. E-2391 supplies the project
+code and precedes this task.
 
 ## The row
 
