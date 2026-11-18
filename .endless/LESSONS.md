@@ -8173,3 +8173,7 @@ Filing ED-1674 to define backlog for E-2652, I included where the numbers would 
 ### [2026-11-18] Re-read a decision before telling Mike what it says
 Reporting on E-2652's follow-ups, I told Mike that ED-1673 was still proposed and needed rewording, based on the text I filed and E-2572's outcome. Another session had already revised it and Mike had accepted it, so my warning was stale. Decisions change between turns: run endless decision show before describing a decision's status or wording. Separately, Mike called the closing 'Mike, reviewing E-2572.' nonsensical for a decision: a decision's text should not end with who said it or during which task; links carry that.
 - **Project**: endless
+
+### [2026-11-18] Write a decision's attribution as a full sentence
+This corrects my earlier lesson 'Re-read a decision before telling Mike what it says', which said a decision's text should not close with who decided it or during which task. Mike said that closing is fine. What he objected to on ED-1673 was the fragment 'Mike, reviewing E-2572.', which does not convey that information. Write it as a sentence, such as 'Decided by Mike while reviewing E-2572.' The advice to re-read a decision before describing it still stands.
+- **Project**: endless
