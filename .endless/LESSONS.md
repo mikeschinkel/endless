@@ -8165,3 +8165,7 @@ While handing off the E-2572 tmux research, I summarized the cost of the hook ru
 ### [2026-11-18] Find the pending task behind a term Mike says is still pending
 While planning E-2652's console status row, Mike asked for 'name (slug)' or 'name (code)' and said he wasn't sure what the pending task had decided to call it. I mapped that to the project's existing label and name fields and proposed 'Endless Project Tracker (endless)'. He meant the planned 1-to-4 character uppercase project code described in E-2391, so 'endless (E)'. When Mike points at a pending task for a term, search for that task and use its definition rather than fitting the term to fields that exist today.
 - **Project**: endless
+
+### [2026-11-18] State only the definition in a decision that defines a term
+Filing ED-1674 to define backlog for E-2652, I included where the numbers would appear (the console's tmux status line, project show), the list of terminal statuses, a rejected alternative and who asked. Mike objected that this was not germane to defining the term and asked whether the decision would still be correct if Endless moved away from tmux. A decision that defines a term should say what the term means and leave out the surfaces and technology that use it today.
+- **Project**: endless
