@@ -85,4 +85,4 @@ statement = "Does not add storage for project codes, which E-2391 supplies"
 [[item]]
 id = "P15"
 kind = "exclusion"
-statement = "Does not add the project info popup, which E-2655 and its follow-up task cover"
+statement = "Does not add the project info popup, which E-2656 covers"
