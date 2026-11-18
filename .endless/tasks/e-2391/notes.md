@@ -1,0 +1,1 @@
+Mike, planning E-2652: the code is 1 to 4 uppercase characters, and the choice of code for a project is still open. His candidates: `E`, `END` or `ELS` for endless, and `CLI` or `GCLI` for go-cliutil. The examples in this task's context are illustrations, not assignments. Where a project's name and code appear together, the form is `endless (E)` and `go-cliutil (CLI)`.
