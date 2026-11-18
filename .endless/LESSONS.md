@@ -8177,3 +8177,7 @@ Reporting on E-2652's follow-ups, I told Mike that ED-1673 was still proposed an
 ### [2026-11-18] Write a decision's attribution as a full sentence
 This corrects my earlier lesson 'Re-read a decision before telling Mike what it says', which said a decision's text should not close with who decided it or during which task. Mike said that closing is fine. What he objected to on ED-1673 was the fragment 'Mike, reviewing E-2572.', which does not convey that information. Write it as a sentence, such as 'Decided by Mike while reviewing E-2572.' The advice to re-read a decision before describing it still stands.
 - **Project**: endless
+
+### [2026-11-18] Judge E-2657 options as a new user would meet them
+While planning E-2657 (socket on generated tmux command lines), I listed costs that exist only for tmux servers already running from an older Endless, and proposed a fallback that served only those servers. Mike asked whether a new user would benefit and pointed out that no Endless server can run before its config is generated and endless start has run. For this task, weigh an option by what a new user gets; a cost limited to already-running servers does not count against it. Mike also said session monitor and project monitor should not be valid on servers other than Endless's, so a cost to monitors on those servers is moot.
+- **Project**: endless
