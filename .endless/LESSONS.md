@@ -8161,3 +8161,7 @@ On E-2572 I found tests reaching the live tmux servers and recommended filing a 
 ### [2026-11-18] Explain a stated cost through the scenario that produces it
 While handing off the E-2572 tmux research, I summarized the cost of the hook rule in one compressed sentence about liveness tracking and task claim. Mike could not follow it and asked me to elaborate. When a recommendation carries a cost Mike must accept, say what happens step by step, what differs from today, and how a person recovers. Checking that path again also showed my summary was wrong about recovery, so re-read the code before compressing a behavior claim.
 - **Project**: endless
+
+### [2026-11-18] Find the pending task behind a term Mike says is still pending
+While planning E-2652's console status row, Mike asked for 'name (slug)' or 'name (code)' and said he wasn't sure what the pending task had decided to call it. I mapped that to the project's existing label and name fields and proposed 'Endless Project Tracker (endless)'. He meant the planned 1-to-4 character uppercase project code described in E-2391, so 'endless (E)'. When Mike points at a pending task for a term, search for that task and use its definition rather than fitting the term to fields that exist today.
+- **Project**: endless
