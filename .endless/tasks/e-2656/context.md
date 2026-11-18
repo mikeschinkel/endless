@@ -1,0 +1,1 @@
+Mike, planning E-2652: endless-tasks can show Task Details in a popup, and the console could do the same for a project. The console status row stays to a few counts, so the fuller view belongs here. What project info shows is settled by E-2655 first.
