@@ -8157,3 +8157,7 @@ While working E-2572 (decide which tmux server each endless command may run on),
 ### [2026-11-18] E-2572: hold task filing until the research is complete
 On E-2572 I found tests reaching the live tmux servers and recommended filing a bugfix immediately, while the research was still open. Mike said to wait until the research is complete before filing any tasks, and to consider ED-1550 when deciding what to file.
 - **Project**: endless
+
+### [2026-11-18] Explain a stated cost through the scenario that produces it
+While handing off the E-2572 tmux research, I summarized the cost of the hook rule in one compressed sentence about liveness tracking and task claim. Mike could not follow it and asked me to elaborate. When a recommendation carries a cost Mike must accept, say what happens step by step, what differs from today, and how a person recovers. Checking that path again also showed my summary was wrong about recovery, so re-read the code before compressing a behavior claim.
+- **Project**: endless
