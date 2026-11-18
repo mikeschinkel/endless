@@ -1,0 +1,1 @@
+What a project's summary should show and how it should read is the user's design call, and it has to be settled before the command or the console popup can be planned.
