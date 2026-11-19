@@ -83,3 +83,8 @@ post_land = true
 id = "P16"
 kind = "deliverable"
 statement = "The approval handoff is delivered by internal/sessionmsg, lifted out of the triage job's claude -p SendMessage sender, which both now use"
+
+[[item]]
+id = "P17"
+kind = "deliverable"
+statement = "A ledger event older than E-2664 that types a task 'plan' still rebuilds the task as untyped"
