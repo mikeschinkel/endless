@@ -7,3 +7,7 @@ Points agreed with Mike on 2026-11-19. They are a starting point for this task's
 5. The type a `plan` task becomes is proposed by the filer (optional), then proposed or changed by the planning session, and ratified by the user. It can only be a "do" type, such as todo, bugfix, docs, or a future type. Once approved, the task converts to that type and keeps its ID. Mike has ideas for injecting the do-type handoff document at that point.
 6. Research and brainstorm tasks are never `plan` tasks. Mike knows their type when he files them, and they are given a brief rather than a plan: filed with a brief, and spawnable with just a brief. If Endless does not already work that way, this task makes the change.
 7. `endless guide` has to explain how to file a `plan` task well enough that no skill is needed.
+
+## Alternative considered and rejected
+
+I first proposed keeping types unchanged and adding `endless task spawn E-N --to-plan`, which would spawn an `unplanned` task into a session that ends at `submitted`. My reason was that a type should say what kind of deliverable a task produces, and a type that changes into another type mixes that with the lifecycle. Mike preferred the `plan` type for three reasons: it carries its own handoff document, which a status cannot; spawn can gate on it without a flag or a new status; and it lets a task be filed and spawned from the CLI with no Claude session.
