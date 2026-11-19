@@ -1,7 +1,7 @@
 ## Decisions made with Mike while planning (2026-11-18)
 
 - **Pane lookups take the server as a parameter.** Rejected: one socket set per process, because it silently redirects every `monitor` tmux call in that process. Rejected: adding the flag without changing the lookups, because the flag would then have no effect.
-- **A generated line without `--socket` does not fall back.** Only servers already running from an older Endless would use a fallback; a new user never reaches it.
+- **Generated lines carry `--socket`; without it, a verb that serves either server resolves it from `$TMUX`.** `status-line`, `show-menu`, `active-id` and `monitor-wake` use the configured server whose socket matches `$TMUX` and fail when it matches neither, never using the caller's server. `--socket` wins over `$TMUX` (Mike, reviewing P5: requiring `--socket` was an unintended consequence). Rejected: dropping `--socket` from the lines.
 - **`tmux apply` and `tmux init` name their server with `--server tasks|console`.** Rejected: working only from inside a pane of the server, and removing the verbs.
 - **The `monitor-wake` hooks move into each server's generated config.** Rejected: keeping the runtime install.
 - **Live monitors refuse outside a pane of an Endless server, including outside tmux.** ED-1673 was amended to say so.
