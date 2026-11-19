@@ -29,8 +29,8 @@ verify = "Go test of buildMenuItems"
 [[item]]
 id = "P5"
 kind = "deliverable"
-statement = "tmux status-line without --socket prints the placeholder, exits 0 and makes no tmux call"
-verify = "Go test with a tmux seam that fails on any call"
+statement = "tmux status-line without --socket uses the Endless server whose socket matches $TMUX, and prints the placeholder with exit 0 and no pane lookup when $TMUX matches neither"
+verify = "Go test inside each Endless server, inside another server and outside tmux"
 
 [[item]]
 id = "P6"
