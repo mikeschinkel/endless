@@ -2,7 +2,7 @@
 
 ## Generated lines (`internal/tmuxcmd`)
 
-Change `buildApplySteps` to take the target server and write its socket into the `status-line` and `show-menu` lines. Change `buildMenuItems` to do the same for `active-id` and `tmux display-popup`. Add `--socket` to `status-line`, `show-menu` and `active-id`.
+Change `buildApplySteps` to take the target server and write its socket into the `status-line` and `show-menu` lines. Change `buildMenuItems` to do the same for `active-id` and `tmux display-popup`. Add `--socket` to `status-line`, `show-menu` and `active-id`. One resolver in `tmuxservers` serves these three and `monitor-wake`: `--socket` when given, else the configured server whose socket matches `$TMUX`, else an error the verb turns into its own failure.
 
 ## Pane lookups (`internal/monitor/tmux_lookup.go`, `processes.go`)
 
