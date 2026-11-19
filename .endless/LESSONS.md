@@ -8181,3 +8181,7 @@ This corrects my earlier lesson 'Re-read a decision before telling Mike what it 
 ### [2026-11-18] Judge E-2657 options as a new user would meet them
 While planning E-2657 (socket on generated tmux command lines), I listed costs that exist only for tmux servers already running from an older Endless, and proposed a fallback that served only those servers. Mike asked whether a new user would benefit and pointed out that no Endless server can run before its config is generated and endless start has run. For this task, weigh an option by what a new user gets; a cost limited to already-running servers does not count against it. Mike also said session monitor and project monitor should not be valid on servers other than Endless's, so a cost to monitors on those servers is moot.
 - **Project**: endless
+
+### [2026-11-19] Commands that serve either Endless server resolve it from $TMUX
+While reviewing E-2657's plan items, Mike found that I had made tmux status-line, show-menu and monitor-wake require --socket and fail without it. He called that an unintended consequence: a command that can apply to either the tasks or the console server should read $TMUX, use the server it matches, and fail if it matches neither. I had turned his earlier choice (no fallback for lines without a socket, chosen because only legacy servers needed it) into a required flag, which also removed the $TMUX comparison that ED-1673 allows.
+- **Project**: endless
