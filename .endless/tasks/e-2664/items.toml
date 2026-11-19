@@ -93,3 +93,8 @@ statement = "A ledger event older than E-2664 that types a task 'plan' still reb
 id = "P18"
 kind = "deliverable"
 statement = "task show prints the proposed type beside a plan task's type"
+
+[[item]]
+id = "P19"
+kind = "deliverable"
+statement = "task claim and task prime refuse a plan task"
