@@ -35,8 +35,8 @@ verify = "Go test inside each Endless server, inside another server and outside 
 [[item]]
 id = "P6"
 kind = "deliverable"
-statement = "tmux show-menu without --socket refuses and opens no menu"
-verify = "Go test of the refusal"
+statement = "tmux show-menu without --socket uses the Endless server whose socket matches $TMUX, and refuses without opening a menu when $TMUX matches neither"
+verify = "Go test inside each Endless server and inside another server"
 
 [[item]]
 id = "P7"
