@@ -8185,3 +8185,7 @@ While planning E-2657 (socket on generated tmux command lines), I listed costs t
 ### [2026-11-19] Commands that serve either Endless server resolve it from $TMUX
 While reviewing E-2657's plan items, Mike found that I had made tmux status-line, show-menu and monitor-wake require --socket and fail without it. He called that an unintended consequence: a command that can apply to either the tasks or the console server should read $TMUX, use the server it matches, and fail if it matches neither. I had turned his earlier choice (no fallback for lines without a socket, chosen because only legacy servers needed it) into a required flag, which also removed the $TMUX comparison that ED-1673 allows.
 - **Project**: endless
+
+### [2026-11-19] Recommend on PRODUCT grounds, not on this machine's data
+While planning E-2664 (plan task type), I recommended keeping the context-or-brief gate for research/brainstorm tasks because switching to brief-only would refuse 62 existing unstarted tasks in Mike's own database. Mike was annoyed: that is a non-PRODUCT concern (a one-time migration cost on this machine) driving a design recommendation. His answer was to change the rule and backfill the 62 with a generic brief in a loop. Lesson: when weighing options, judge them on how the software behaves for any user; treat this machine's existing data as a migration step to plan for, not as a con against the cleaner design.
+- **Project**: endless
