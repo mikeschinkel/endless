@@ -89,8 +89,8 @@ verify = "Go test against a private tmux server"
 [[item]]
 id = "P15"
 kind = "deliverable"
-statement = "monitor-wake without --socket exits 0 and signals nothing"
-verify = "Go test of RunWake"
+statement = "monitor-wake without --socket uses the Endless server whose socket matches $TMUX, and exits 0 signalling nothing when $TMUX matches neither"
+verify = "Go test of RunWake inside an Endless server and inside another server"
 
 [[item]]
 id = "P16"
