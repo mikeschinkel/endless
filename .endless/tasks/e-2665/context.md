@@ -1,0 +1,1 @@
+Plan tasks (E-2664) overlap task prime: both start a session that reads a task in and drafts its plan. Mike, 2026-11-19: 'We may find that some or all of task priming can go away with this change.' Decide which parts of priming, if any, still earn their keep, and what to remove.
