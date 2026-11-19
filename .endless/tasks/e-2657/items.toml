@@ -11,7 +11,7 @@ verify = "Go test of buildApplySteps for the tasks and console servers"
 [[item]]
 id = "P2"
 kind = "deliverable"
-statement = "tmux status-line and show-menu given --socket resolve the pane on that server even when $TMUX names a different server"
+statement = "tmux status-line, show-menu and monitor-wake given --socket act on that server even when $TMUX names a different server"
 verify = "Go test with two private tmux servers that hold the same pane id"
 
 [[item]]
