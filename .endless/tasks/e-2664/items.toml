@@ -78,3 +78,8 @@ id = "P15"
 kind = "deliverable"
 statement = "Mike is reminded to delete ~/.claude/commands/needs-plan.md, which is outside the repo"
 post_land = true
+
+[[item]]
+id = "P16"
+kind = "deliverable"
+statement = "The approval handoff is delivered by internal/sessionmsg, lifted out of the triage job's claude -p SendMessage sender, which both now use"
