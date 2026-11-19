@@ -5,42 +5,42 @@
 [[item]]
 id = "P1"
 kind = "deliverable"
-statement = "Endless has a 'plan' task type, and a plan task can be filed with only a brief; Context and Analysis can also be given but are not required"
+statement = "Endless has a 'plan' task type and a 'brief' content field; task add --type plan is refused without --brief, and Context and Analysis may also be given but are not required"
 
 [[item]]
 id = "P2"
 kind = "deliverable"
-statement = "task spawn accepts a plan-type task that has no plan, gating on the type rather than on a flag or a new status"
+statement = "task spawn accepts a plan task that has a brief and no plan, and binds the spawned session without claiming it, so the task stays unplanned until its plan is attached"
 
 [[item]]
 id = "P3"
 kind = "deliverable"
-statement = "A spawned plan task's session receives a plan-type handoff document whose job is to write the task's plan and submit it for approval"
+statement = "A spawned plan task's session receives a plan-type handoff whose job is to put its open questions to the user in the chat, then write the plan and its items and submit them with a proposed do type and ratings"
 
 [[item]]
 id = "P4"
 kind = "deliverable"
-statement = "The plan-type handoff document carries the rules of the /needs-plan command, so no skill is needed to plan a task"
+statement = "The /needs-plan rules live in a guide section (endless guide tasks/planning) that the plan handoff tells the session to read, and the handoff also states them in short form"
 
 [[item]]
 id = "P5"
 kind = "deliverable"
-statement = "Filing a plan task spawns it by default without changing which tmux window has focus, and --no-spawn files it without spawning"
+statement = "Filing a plan task spawns it by default without changing which tmux window has focus; --no-spawn files it without spawning, and a failed spawn keeps the filed task and prints the spawn command"
 
 [[item]]
 id = "P6"
 kind = "deliverable"
-statement = "A plan task's eventual type may be proposed by the filer, is proposed or changed by the planning session, and is ratified by the user; it can only be a do type (todo, bugfix, or a future do type such as docs)"
+statement = "A plan task's eventual do type is set with --becomes, optionally by the filer on task add and by the planning session on task submit or update, and ratified by the user at task approve, which may change it; only todo and bugfix are accepted"
 
 [[item]]
 id = "P7"
 kind = "deliverable"
-statement = "Once its plan is approved, a plan task converts to its ratified do type, keeping its ID, and that type's handoff document applies from then on"
+statement = "task approve on a plan task converts it to its ratified do type keeping its ID, then asks whether to send the do type's handoff to the planning session (--yes skips the question) and sends it through a claude -p call that uses SendMessage"
 
 [[item]]
 id = "P8"
 kind = "deliverable"
-statement = "Research and brainstorm tasks can be filed and spawned with a brief alone, without a plan"
+statement = "Research and brainstorm tasks can be spawned and claimed with a brief and no plan; a context with no brief no longer suffices for them (epics are unchanged)"
 
 [[item]]
 id = "P9"
@@ -50,4 +50,31 @@ statement = "endless guide explains how to file a plan task well enough that a u
 [[item]]
 id = "P10"
 kind = "exclusion"
-statement = "Research and brainstorm tasks are never filed as plan tasks"
+statement = "Research and brainstorm tasks are never filed as plan tasks, and --becomes refuses them"
+
+[[item]]
+id = "P11"
+kind = "deliverable"
+statement = "task update --type plan is accepted on an unplanned todo or bugfix that has a brief, and records its former type as the proposed --becomes type"
+
+[[item]]
+id = "P12"
+kind = "exclusion"
+statement = "Does not change or remove task prime; whether it can go away is left for after this lands"
+
+[[item]]
+id = "P13"
+kind = "exclusion"
+statement = "Does not add a docs task type"
+
+[[item]]
+id = "P14"
+kind = "deliverable"
+statement = "Every unstarted research or brainstorm task that has a context but no brief and no plan is given a generic brief, so the brief-only gate does not refuse it"
+post_land = true
+
+[[item]]
+id = "P15"
+kind = "deliverable"
+statement = "Mike is reminded to delete ~/.claude/commands/needs-plan.md, which is outside the repo"
+post_land = true
