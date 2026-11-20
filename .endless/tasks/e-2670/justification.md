@@ -1,0 +1,1 @@
+The choice between a template and a new type changes the status lifecycle and the guide, and needs the user's input before any plan.
