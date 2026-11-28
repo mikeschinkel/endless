@@ -46,3 +46,8 @@ statement = "Restoring a replace to work around a change missing from a publishe
 id = "P9"
 kind = "exclusion"
 statement = "Writing go.work files, which E-2563 and E-2561 own"
+
+[[item]]
+id = "P10"
+kind = "deliverable"
+statement = "worktree_cmd.py's comments and tests/test_install_worktree_recipes.py no longer name go-work-init"
