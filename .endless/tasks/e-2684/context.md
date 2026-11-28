@@ -3,3 +3,8 @@ What happened (2026-11-28, go-testutil). E-2674 had landed twice and was assumed
 Where it happens. internal/templatecmd/template.go: the render path calls materializeIfMissing(projectRoot, name) and then commitMaterialized(projectRoot, name). The comments say the commit is meant for the project's git repo, with an inherited GIT_DIR stripped so a caller inside a worktree cannot misroute it. Here projectRoot came from resolveProjectRoot, and the commit still landed on the worktree's branch.
 
 Scope. It happens the first time a given template is materialized in a project, when that command runs from a task worktree; go-testutil's main already has handoff/todo.md from an earlier materialize (205864f). How to fix it is for the session that works this task to work out with Mike.
+
+
+**Same cause in every auto-commit (found while planning, 2026-11-28).** internal/events/commit.go's commitPaths, which commits the ledger, document mirrors and lessons, refuses a linked worktree (ensureMainCheckout) but commits onto whatever branch the main checkout has checked out. It never checks for the default branch. So when the main checkout is on any other branch, all of those auto-commits miss main as well. Mike (2026-11-28): this is the same bug, not a consistency concern, and it belongs in this task, not a new one (ED-1550: several symptoms of one cause are one task).
+
+**Answered so far (Mike, 2026-11-28).** A render run from a worktree materializes and commits a missing template in the main checkout, but renders from the current checkout. Auto-commits reach the default branch even when the main checkout is on another branch, fixed in the shared commit path so every caller gets it.
