@@ -10,7 +10,7 @@ statement = "Endless's go.mod has no replace directive, including the former go-
 [[item]]
 id = "P2"
 kind = "deliverable"
-statement = "go.mod requires each go-pkgs module it uses at that module's newest published tag, and go mod tidy leaves it unchanged"
+statement = "go.mod requires each go-pkgs module it uses at that module's newest published tag that builds, holding go-cfgstore below v0.5.0 until E-2685 migrates to it, and go mod tidy leaves it unchanged"
 
 [[item]]
 id = "P3"
