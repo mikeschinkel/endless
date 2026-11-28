@@ -8189,3 +8189,7 @@ While reviewing E-2657's plan items, Mike found that I had made tmux status-line
 ### [2026-11-19] Recommend on PRODUCT grounds, not on this machine's data
 While planning E-2664 (plan task type), I recommended keeping the context-or-brief gate for research/brainstorm tasks because switching to brief-only would refuse 62 existing unstarted tasks in Mike's own database. Mike was annoyed: that is a non-PRODUCT concern (a one-time migration cost on this machine) driving a design recommendation. His answer was to change the rule and backfill the 62 with a generic brief in a loop. Lesson: when weighing options, judge them on how the software behaves for any user; treat this machine's existing data as a migration step to plan for, not as a con against the cleaner design.
 - **Project**: endless
+
+### [2026-11-28] A blocker must be something the task cannot be done without
+While unblocking E-2523 (build Endless from published module versions only), Mike called E-2561 as its blocker a prior session over-reaching. E-2561 is a gomion command for managing go.work when developing against sibling code; E-2523 only removes go.mod replaces and needs none of it, so the link held a fix to a live breakage (endless's main building against go-cfgstore's checkout HEAD) behind unplanned, unrelated work. When recording blocked_by, ask whether the task literally cannot be done or verified without the other; a nice-to-have, a related workflow or a follow-up is a relates-to, not a blocker.
+- **Project**: endless
