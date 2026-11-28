@@ -1,0 +1,135 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.2.0",
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 12,
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1795867513644,
+      "stop": 1795867603276
+    },
+    "tests": [
+      {
+        "name": "go.mod is tidy without go.work",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "go.mod is tidy without go.work"
+        }
+      },
+      {
+        "name": "TestGoModHasNoReplace",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/cmd/endless-go"
+        ],
+        "labels": {
+          "check": "go.mod replace guard test"
+        }
+      },
+      {
+        "name": "tests/test_install_worktree_recipes.py::test_config_recipes_come_from_main_and_build_from_the_branch",
+        "status": "passed",
+        "duration": 1266,
+        "suite": [
+          "tests/test_install_worktree_recipes.py"
+        ],
+        "labels": {
+          "check": "install recipe calls build, dev-sandbox-init, claude-settings-init only"
+        }
+      },
+      {
+        "name": "tests/test_endless_worktree_hook.py::test_no_recipe_is_run_against_the_worktrees_own_justfile",
+        "status": "passed",
+        "duration": 65,
+        "suite": [
+          "tests/test_endless_worktree_hook.py"
+        ],
+        "labels": {
+          "check": "install recipe calls build, dev-sandbox-init, claude-settings-init only"
+        }
+      },
+      {
+        "name": "tests/test_endless_worktree_hook.py::test_main_checkout_is_known_before_the_first_recipe",
+        "status": "passed",
+        "duration": 114,
+        "suite": [
+          "tests/test_endless_worktree_hook.py"
+        ],
+        "labels": {
+          "check": "install recipe calls build, dev-sandbox-init, claude-settings-init only"
+        }
+      },
+      {
+        "name": "tests/test_endless_worktree_hook.py::test_the_hook_calls_recipes_that_exist",
+        "status": "passed",
+        "duration": 267,
+        "suite": [
+          "tests/test_endless_worktree_hook.py"
+        ],
+        "labels": {
+          "check": "install recipe calls build, dev-sandbox-init, claude-settings-init only"
+        }
+      },
+      {
+        "name": "tests/test_endless_worktree_hook.py::test_called_recipes_do_not_locate_themselves_by_the_justfile",
+        "status": "passed",
+        "duration": 253,
+        "suite": [
+          "tests/test_endless_worktree_hook.py"
+        ],
+        "labels": {
+          "check": "install recipe calls build, dev-sandbox-init, claude-settings-init only"
+        }
+      },
+      {
+        "name": "go.mod holds no replace directive",
+        "status": "passed",
+        "duration": 21,
+        "labels": {
+          "check": "go.mod holds no replace directive"
+        }
+      },
+      {
+        "name": "go.mod requires published go-pkgs tags, go-cfgstore below v0.5.0",
+        "status": "passed",
+        "duration": 88,
+        "labels": {
+          "check": "go.mod requires published go-pkgs tags, go-cfgstore below v0.5.0"
+        }
+      },
+      {
+        "name": "GOWORK=off build and vet pass",
+        "status": "passed",
+        "duration": 7009,
+        "labels": {
+          "check": "GOWORK=off build and vet pass"
+        }
+      },
+      {
+        "name": "GOWORK=off go test passes",
+        "status": "passed",
+        "duration": 77601,
+        "labels": {
+          "check": "GOWORK=off go test passes"
+        }
+      },
+      {
+        "name": "go-work-init is gone from justfile, hook and .gitignore",
+        "status": "passed",
+        "duration": 9,
+        "labels": {
+          "check": "go-work-init is gone from justfile, hook and .gitignore"
+        }
+      }
+    ]
+  }
+}
