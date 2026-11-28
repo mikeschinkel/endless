@@ -2747,8 +2747,8 @@ def _bootstrap_task_worktree(
 
     Writes the companion marker (`.endless/worktree.json` + scratch dir),
     creates the worktree's sandbox, runs Endless's worktree extensions
-    (E-2563), runs the project's post-worktree-create hook (go-work-init, bin
-    copy, claude-settings-init, ...), then seeds the sandbox with `endless
+    (E-2563), runs the project's post-worktree-create hook (bin copy,
+    claude-settings-init, ...), then seeds the sandbox with `endless
     sandbox reset` (E-1608).
 
     It materializes NO document mirrors (E-2137). Those live on main, where
@@ -2796,7 +2796,7 @@ def _bootstrap_task_worktree(
         pass
     # E-2563: Endless's own worktree extensions (the Go one writes a go.work)
     # run BEFORE the project's hook, so a hook that regenerates the same file
-    # with more in it — Endless's own go-work-init does — has the last word.
+    # with more in it has the last word.
     run_worktree_extensions(wt_dir)
     _run_post_worktree_create_hook(project_root, wt_dir)
     # E-1608: seed through the one front door, after the create hook (which

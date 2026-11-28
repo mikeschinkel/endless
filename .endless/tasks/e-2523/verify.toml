@@ -1,0 +1,39 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2523 and records what was true when E-2523
+# landed. Edit it only if you ARE E-2523. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+schema = 1
+task   = "E-2523"
+
+[[check]]
+name   = "go.mod replace guard test"
+runner = "gotest"
+paths  = ["./cmd/endless-go/"]
+tests  = ["TestGoModHasNoReplace"]
+
+[[check]]
+name   = "install recipe calls build, dev-sandbox-init, claude-settings-init only"
+runner = "pytest/uv"
+paths  = ["tests/test_install_worktree_recipes.py", "tests/test_endless_worktree_hook.py"]
+
+[[check]]
+name   = "go.mod holds no replace directive"
+sh     = "GOWORK=off go mod edit -json | grep -c '\"Replace\"' || true"
+equals = "0"
+
+[[check]]
+name   = "go.mod requires published go-pkgs tags, go-cfgstore below v0.5.0"
+sh     = "GOWORK=off go list -m -f '{{.Path}} {{.Version}}' all | grep mikeschinkel/go-"
+contains = "github.com/mikeschinkel/go-cfgstore v0.4.1"
+
+[[check]]
+name   = "GOWORK=off build and vet pass"
+sh     = "GOWORK=off go build ./... && GOWORK=off go vet ./..."
+
+[[check]]
+name   = "GOWORK=off go test passes"
+sh     = "GOWORK=off go test ./..."
+
+[[check]]
+name   = "go-work-init is gone from justfile, hook and .gitignore"
+sh     = "! grep -n go-work-init justfile .endless/hooks/post-worktree-create.sh .gitignore"

@@ -4,14 +4,14 @@ config recipes from MAIN's justfile and `build` from the branch's (E-2183).
 A worktree on an older branch carries an older justfile. A bare `just
 claude-settings-init` there ran that branch's version, which for any branch cut
 before E-2166 re-pinned every Claude hook at the worktree's own binary. So the
-scoped install resolves go-work-init, dev-sandbox-init and claude-settings-init
+scoped install resolves dev-sandbox-init and claude-settings-init
 through `--justfile <main>/justfile`, the way post-worktree-create.sh does —
 and leaves `build` bare, because a worktree exists to build candidate code.
 
 WHY END-TO-END. A test that greps the recipe for `--justfile` passes on a recipe
 that names the flag and still calls the wrong thing. This one builds a real repo
 with a real worktree whose justfile DIFFERS from main's: both carry the real
-`install` recipe, copied from this checkout, but each stubs the four recipes it
+`install` recipe, copied from this checkout, but each stubs the three recipes it
 calls with one that logs which justfile it came from. The log is the assertion.
 """
 
@@ -30,7 +30,7 @@ pytestmark = pytest.mark.skipif(
     shutil.which("just") is None, reason="the `just` binary is not on PATH"
 )
 
-CALLED = ("go-work-init", "build", "dev-sandbox-init", "claude-settings-init")
+CALLED = ("build", "dev-sandbox-init", "claude-settings-init")
 
 
 def _install_recipe() -> str:
@@ -81,7 +81,6 @@ def test_config_recipes_come_from_main_and_build_from_the_branch(worktree):
     assert proc.returncode == 0, proc.stderr
 
     assert log.read_text().split() == [
-        "main:go-work-init",
         "branch:build",
         "main:dev-sandbox-init",
         "main:claude-settings-init",

@@ -17,22 +17,16 @@
 # no-op (or a clean regenerate).
 #
 # What this does for endless-on-endless (each step idempotent / re-runnable):
-#   1. go.mod's `replace ../go-pkgs/X` directives only resolve from the main
-#      checkout — a worktree sees them at the wrong relative depth and Go builds
-#      break. `just go-work-init` generates a per-worktree go.work with absolute
-#      paths to the local go-pkgs modules, which overrides the relative replaces.
-#      (go.work is gitignored / per-developer.) This sets the worktree up so the
-#      agent can rebuild candidate Go later, when its branch diverges from main.
-#   2. COPY the main checkout's prebuilt bin/endless-go into this worktree's
+#   1. COPY the main checkout's prebuilt bin/endless-go into this worktree's
 #      bin/. A freshly-created worktree == main (no candidate code yet), so a
 #      build here would only slowly reproduce the binary main already has —
 #      copying is the identical result, instantly. Without bin/endless-go the
 #      per-worktree sandbox CLI falls back to the global/main binary (E-1662/
 #      E-1281). The agent rebuilds with `just build` only once it edits Go.
-#   3. Seeding the sandbox is NOT done here. Endless runs `endless sandbox
+#   2. Seeding the sandbox is NOT done here. Endless runs `endless sandbox
 #      reset` right after this hook, which runs .endless/hooks/seed-sandbox.sh
 #      (E-1608) — the one front door, shared with every `endless task verify`.
-#   4. `just claude-settings-init` writes .claude/settings.local.json — the
+#   3. `just claude-settings-init` writes .claude/settings.local.json — the
 #      LOCAL file, not the tracked .claude/settings.json (E-1347). Today that
 #      means worktree.bgIsolation and nothing else: E-2166 removed the hook
 #      override this step used to write, because ED-1596 has every hook run the
@@ -64,9 +58,6 @@ main_checkout="$(dirname "$(cd "$(git rev-parse --git-common-dir)" && pwd)")"
 recipe() {
     just --justfile "${main_checkout}/justfile" --working-directory "${worktree}" "$@"
 }
-
-echo "post-worktree-create: generating go.work for ${worktree}"
-recipe go-work-init
 
 # Copy main's prebuilt binary rather than building (see header).
 src_bin="${main_checkout}/bin/endless-go"

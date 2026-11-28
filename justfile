@@ -54,7 +54,7 @@ build: go
 #
 # The scoped install NEVER touches the global symlink or the global uv tool —
 # scoping is achieved purely by injection (XDG + the worktree's own bin/ and
-# sandbox) via the existing recipes (go-work-init + build + dev-sandbox-init +
+# sandbox) via the existing recipes (build + dev-sandbox-init +
 # claude-settings-init). This turns the `just install`-from-a-worktree footgun
 # (which used to silently repoint the system-default toolchain at transient
 # worktree code — live incident 2026-06-15) into the right outcome.
@@ -65,7 +65,7 @@ build: go
 # still serves its CLI and sandbox work; it just no longer serves hook events.
 #
 # Machine-level config comes from main; candidate behaviour comes from the
-# branch (E-2183). The scoped install runs go-work-init, dev-sandbox-init and
+# branch (E-2183). The scoped install runs dev-sandbox-init and
 # claude-settings-init from MAIN's justfile against this worktree, exactly as
 # .endless/hooks/post-worktree-create.sh does and for its reason: a worktree on
 # an older branch carries an older justfile, and a bare `just claude-settings-
@@ -142,12 +142,11 @@ install mode="":
     recipe() {
         just --justfile "${main_checkout}/justfile" --working-directory "${worktree}" "$@"
     }
-    recipe go-work-init
     just build
     recipe dev-sandbox-init
     recipe claude-settings-init
     echo "install: worktree-scoped setup complete for $(pwd)"
-    echo "  Wired: go.work, bin/*, .claude/settings.local.json. Global /usr/local/bin untouched."
+    echo "  Wired: bin/*, .claude/settings.local.json. Global /usr/local/bin untouched."
 
 # Land a task's worktree (calls `endless worktree land`), then rebuild
 # binaries so the symlinked /usr/local/bin/endless-* binaries pick up
@@ -246,47 +245,6 @@ land task_id="":
         echo "→ Land reported success but main did not move; skipping rebuild."
     fi
     exit "${land_rc}"
-
-# Generate go.work for the current checkout/worktree (E-996).
-#
-# go.mod has 'replace ../go-pkgs/X' directives that resolve relative to
-# the go.mod's location — works from main, breaks from worktrees. go.work
-# overrides those replaces with absolute paths, fixing builds anywhere.
-#
-# go.work is gitignored (per-developer; absolute paths are local). Run
-# this once per fresh clone or worktree. When go.work is present, the
-# go.mod replace directives are ignored — but they remain as a fallback
-# for anyone without go.work.
-go-work-init:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    main_checkout="$(dirname "$(git rev-parse --git-common-dir)")"
-    main_checkout="$(cd "$main_checkout" && pwd)"
-    go_pkgs_root="$(cd "$main_checkout/.." && pwd)/go-pkgs"
-    if [ ! -d "$go_pkgs_root" ]; then
-        echo "go-pkgs not found at $go_pkgs_root" >&2
-        exit 1
-    fi
-    rm -f go.work go.work.sum
-    go work init
-    go work use .
-    # Discover go-pkgs sub-modules from go.mod's replace lines (lines with
-    # '=>' only — skips the documentation comment that mentions ../go-pkgs)
-    # and add each as an explicit go.work replace. Replace (rather than use)
-    # avoids 'conflicting replacement' errors with go.mod's relative-path
-    # replaces — go.work's replace overrides go.mod's for the same module.
-    grep -E '=>\s*\.\./.*go-pkgs/' "$main_checkout/go.mod" \
-        | sed -E 's|.*[[:space:]](github\.com/mikeschinkel/[^[:space:]]+)[[:space:]]+=>[[:space:]]*\.\./.*go-pkgs/(.*)$|\1 \2|' \
-        | while read -r module sub; do
-            sub="${sub%/}"
-            target="$go_pkgs_root/$sub"
-            if [ -d "$target" ] && [ -f "$target/go.mod" ]; then
-                go work edit -replace="${module}=${target}"
-            else
-                echo "warning: $target not found for $module, skipping" >&2
-            fi
-        done
-    echo "go.work generated at $(pwd)/go.work"
 
 # Generate the per-worktree .claude/settings.local.json — and strip the hook
 # override a run before E-2166 wrote into it.
